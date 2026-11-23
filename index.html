@@ -8,7 +8,6 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/idb-keyval@6/dist/umd.js"></script>
-<!-- PDF.js for reading PDF files -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -18,7 +17,6 @@
   .spinner { border: 2px solid #e5e7eb; border-top-color: #1E3A8A; border-radius: 50%; width: 18px; height: 18px; animation: spin 0.8s linear infinite; display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
   
-  /* --- PDF Styling (A4 Format) --- */
   .pdf-page { width: 210mm; min-height: 297mm; padding: 10mm 15mm; background: white; color: #000; font-family: Arial, sans-serif; font-size: 10px; }
   .pdf-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px; }
   .pdf-header h1 { font-size: 16px; font-weight: bold; margin: 0; text-transform: uppercase; }
@@ -35,22 +33,21 @@
 <div id="pdf-holder" style="position:fixed;left:-9999px;top:0;"></div>
 
 <script>
-// Set PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 const INSURERS = [
-  { name: 'United India Insurance', color: '#1E3A8A', bg: '#e0e7ff' }, // Dark Blue
-  { name: 'ICICI Lombard',          color: '#b91c1c', bg: '#fee2e2' }, // Red
-  { name: 'HDFC ERGO',              color: '#dc2626', bg: '#fef2f2' }, // HDFC Red
-  { name: 'Bajaj Allianz',          color: '#0284c7', bg: '#e0f2fe' }, // Light Blue
-  { name: 'TATA AIG',               color: '#1e293b', bg: '#f1f5f9' }, // Dark Grey
+  { name: 'United India Insurance', color: '#1E3A8A', bg: '#e0e7ff' },
+  { name: 'ICICI Lombard',          color: '#b91c1c', bg: '#fee2e2' },
+  { name: 'HDFC ERGO',              color: '#dc2626', bg: '#fef2f2' },
+  { name: 'Bajaj Allianz',          color: '#0284c7', bg: '#e0f2fe' },
+  { name: 'TATA AIG',               color: '#1e293b', bg: '#f1f5f9' },
   { name: 'New India Assurance',    color: '#1E3A8A', bg: '#e0e7ff' },
-  { name: 'Oriental Insurance',     color: '#047857', bg: '#d1fae5' }, // Green
-  { name: 'National Insurance',     color: '#4338ca', bg: '#e0e7ff' }, // Indigo
-  { name: 'Acko General',           color: '#0f172a', bg: '#f8fafc' }, // Black/Grey
-  { name: 'Go Digit',               color: '#f59e0b', bg: '#fef3c7' }, // Yellow/Orange
+  { name: 'Oriental Insurance',     color: '#047857', bg: '#d1fae5' },
+  { name: 'National Insurance',     color: '#4338ca', bg: '#e0e7ff' },
+  { name: 'Acko General',           color: '#0f172a', bg: '#f8fafc' },
+  { name: 'Go Digit',               color: '#f59e0b', bg: '#fef3c7' },
   { name: 'Reliance General',       color: '#b91c1c', bg: '#fee2e2' },
-  { name: 'SBI General',            color: '#1e40af', bg: '#dbeafe' }  // SBI Blue
+  { name: 'SBI General',            color: '#1e40af', bg: '#dbeafe' }
 ];
 
 const VEHICLE_TYPES = [
@@ -152,7 +149,6 @@ function getGPS() {
   });
 }
 
-// OCR Function that supports both Images and PDFs
 async function runOCR(file, onProgress) {
   let text = '';
   if (file.type === 'application/pdf') {
@@ -264,7 +260,6 @@ function pickVehicle(id) { state.current.vehicleType = id; state.wizardStep = 2;
 function wizardStep2() {
   const c = state.current; const grouped = {}; FORM_FIELDS.forEach(f => { (grouped[f.section] = grouped[f.section] || []).push(f); });
   
-  // Document Upload Status UI (More clear)
   const docList = [
     { id: 'policy', label: 'Insurance Policy' },
     { id: 'rc', label: 'RC (Registration)' },
@@ -291,7 +286,7 @@ function wizardStep2() {
       <label class="block w-full bg-blue-50 border-2 border-dashed border-[#1E3A8A] rounded-xl p-4 text-center cursor-pointer active:bg-blue-100 transition">
         <span class="text-2xl block mb-1">📁</span>
         <span class="text-sm font-bold text-[#1E3A8A]">Tap to Choose Files</span>
-        <p class="text-[10px] text-gray-500 mt-1">You can select PDF or Images (Policy, RC, DL etc.)</p>
+        <p class="text-[10px] text-gray-500 mt-1">Select PDF or Images (Policy, RC, DL etc.)</p>
         <input type="file" multiple accept="image/*,application/pdf" onchange="handleUpload(event)" class="hidden"/>
       </label>
       
@@ -321,8 +316,6 @@ async function handleUpload(event) {
   
   for (let i = 0; i < files.length; i++) {
     const fileName = files[i].name.toLowerCase();
-    
-    // Guess doc type from filename (For UI display)
     if (fileName.includes('policy')) state.docStatus.policy = true;
     else if (fileName.includes('rc')) state.docStatus.rc = true;
     else if (fileName.includes('dl') || fileName.includes('license')) state.docStatus.dl = true;
@@ -362,4 +355,19 @@ function wizardStep3() {
     <div class="space-y-3">${required.map((shotId) => {
         const shot = SHOT_LABELS[shotId]; const existing = c.photos.find(p => p.shotType === shotId);
         return `<div class="card p-3 ${existing?'ring-2 ring-green-400':''}"><div class="flex items-start gap-3">
-              <div class="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">${existing ? `<img src="${existing.dataUrl}" class="w-full h
+              <div class="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">${existing ? `<img src="${existing.dataUrl}" class="w-full h-full object-cover"/>` : '<span class="text-2xl">📷</span>'}</div>
+              <div class="flex-1 min-w-0"><p class="font-semibold text-sm flex items-center gap-1">${existing ? '✓' : ''} ${shot.label}</p><p class="text-xs text-gray-500 mt-1 leading-snug">${shot.hint}</p>
+                <label class="inline-block mt-2 bg-[#1E3A8A] text-white text-xs px-3 py-2 rounded-lg cursor-pointer">${existing ? 'Retake' : 'Take Photo'}<input type="file" accept="image/*" capture="environment" class="hidden" onchange="capturePhoto(event, '${shotId}')"/></label></div></div></div>`;
+      }).join('')}</div>
+    <button onclick="if(${done}<${required.length}){if(!confirm('Kuch photos pending hain. Phir bhi aage badhein?'))return;}state.wizardStep=4;render();" class="w-full bg-[#F59E0B] text-white p-4 rounded-xl font-bold mt-4">${done===required.length ? 'Next: Review →' : `Skip (${required.length-done} pending) →`}</button>`;
+}
+
+async function capturePhoto(event, shotId) {
+  const file = event.target.files?.[0]; if (!file) return;
+  state.busy = true; state.busyMsg = 'GPS fetch + watermark...'; render();
+  try {
+    const gps = await getGPS(); const shot = SHOT_LABELS[shotId]; const dataUrl = await processImage(file, gps, shot.label); const c = state.current;
+    c.photos = c.photos.filter(p => p.shotType !== shotId);
+    c.photos.push({ shotType: shotId, dataUrl, gps: gps, capturedAt: new Date().toISOString() });
+    state.busy = false; render(); toast(gps ? '✓ Photo saved with GPS' : '✓ Photo saved (GPS unavailable)');
+  } catch (e) { state.busy =
