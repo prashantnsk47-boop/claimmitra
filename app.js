@@ -56,7 +56,7 @@ const FORM_FIELDS = [
   { key:'fir_no', label:'FIR / Crime Diary No', section:'Police Report' },
 ];
 
-let state = { view: 'home', claims: [], current: null, wizardStep: 1, busy: false, busyMsg: '', docStatus: {}, extractedData: { policy: {}, rc: {}, dl: {} } };
+let state = { view: 'home', claims: [], current: null, wizardStep: 1, busy: false, busyMsg: '', docStatus: {}, fileNames: {}, extractedData: { policy: {}, rc: {}, dl: {} } };
 
 async function loadClaims() { try { state.claims = (await idbKeyval.get('claims')) || []; } catch { state.claims = []; } }
 async function saveClaims() { await idbKeyval.set('claims', state.claims); }
@@ -108,16 +108,14 @@ function getGPS() {
   });
 }
 
-// FIX: PDF reading memory issue solved
-async function runOCR(file, docType, onProgress) {
+// Improved OCR to handle PDFs memory-efficiently
+async function runOCR(file, onProgress) {
   let text = '';
   try {
     if (file.type === 'application/pdf') {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      
-      // Read only first 2 pages to save mobile memory
-      const pagesToRead = Math.min(pdf.numPages, 2); 
+      const pagesToRead = Math.min(pdf.numPages, 2); // Read only first 2 pages
       
       for (let i = 1; i <= pagesToRead; i++) {
         const page = await pdf.getPage(i);
@@ -128,18 +126,12 @@ async function runOCR(file, docType, onProgress) {
         canvas.width = viewport.width;
         await page.render({ canvasContext: context, viewport: viewport }).promise;
         
-        // Convert canvas to blob image for Tesseract (saves memory)
         const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg'));
-        
-        const { data } = await Tesseract.recognize(blob, 'eng', { 
-          logger: (m) => { if (m.status === 'recognizing text') onProgress?.(m.progress); } 
-        });
+        const { data } = await Tesseract.recognize(blob, 'eng', { logger: (m) => { if (m.status === 'recognizing text') onProgress?.(m.progress); } });
         text += data.text + '\n';
       }
     } else {
-      const { data } = await Tesseract.recognize(file, 'eng', { 
-        logger: (m) => { if (m.status === 'recognizing text') onProgress?.(m.progress); } 
-      });
+      const { data } = await Tesseract.recognize(file, 'eng', { logger: (m) => { if (m.status === 'recognizing text') onProgress?.(m.progress); } });
       text = data.text;
     }
   } catch (e) {
@@ -149,14 +141,14 @@ async function runOCR(file, docType, onProgress) {
   return text;
 }
 
-// FIX: Extract specific data based on document type
+// Highly specific extraction based on document type
 function extractFromText(text, docType) {
   const t = text.replace(/\s+/g, ' '); const out = {};
   const grab = (pats) => { for (const p of pats) { const m = t.match(p); if (m) return m[1].trim(); } return null; };
 
   if (docType === 'policy') {
-    out.policy_no = grab([/policy\s*(?:no|number|#)[\s:.\-]*([A-Z0-9\-\/]{5,30})/i, /policy\s*[:\-]\s*([A-Z0-9\-\/]{5,30})/i]);
-    out.insured_name = grab([/(?:insured|proposer|policy\s*holder)\s*(?:name)?[\s:.\-]*([A-Z][A-Za-z\s\.]{3,60})/i]);
+    out.policy_no = grab([/policy\s*(?:no|number|#)[\s:.\-]*([A-Z0-9\-\/]{5,30})/i, /policy\s*[:\-]\s*([A-Z0-9\-\/]{5,30})/i, /([A-Z]{2}\/\d{2}\/\d{4}\/\d{6,})/]);
+    out.insured_name = grab([/(?:insured|proposer|policy\s*holder)\s*(?:name)?[\s:.\-]*([A-Z][A-Za-z\s\.]{3,60})/i, /Name\s*[:\-]\s*([A-Z][A-Za-z\s\.]{3,60})/i]);
     out.vehicle_no = grab([/\b([A-Z]{2}[-\s]?\d{1,2}[-\s]?[A-Z]{1,3}[-\s]?\d{4})\b/]);
     out.engine_no = grab([/engine\s*(?:no|number|#)?[\s:.\-]*([A-Z0-9]{8,25})/i]);
     out.chassis_no = grab([/chassis\s*(?:no|number|#)?[\s:.\-]*([A-Z0-9]{12,25})/i]);
@@ -165,15 +157,14 @@ function extractFromText(text, docType) {
   } 
   else if (docType === 'rc') {
     out.vehicle_no = grab([/\b([A-Z]{2}[-\s]?\d{1,2}[-\s]?[A-Z]{1,3}[-\s]?\d{4})\b/]);
-    out.engine_no = grab([/engine\s*(?:no|number|#)?[\s:.\-]*([A-Z0-9]{8,25})/i]);
-    out.chassis_no = grab([/chassis\s*(?:no|number|#)?[\s:.\-]*([A-Z0-9]{12,25})/i]);
-    out.insured_name = grab([/(?:owner|name)\s*[:\-]?\s*([A-Z][A-Za-z\s\.]{3,60})/i]);
+    out.engine_no = grab([/engine\s*(?:no|number|#)?[\s:.\-]*([A-Z0-9]{8,25})/i, /Eng\.?\s*No\.?[\s:.\-]*([A-Z0-9]{8,25})/i]);
+    out.chassis_no = grab([/chassis\s*(?:no|number|#)?[\s:.\-]*([A-Z0-9]{12,25})/i, /Chas\.?\s*No\.?[\s:.\-]*([A-Z0-9]{12,25})/i]);
+    out.insured_name = grab([/(?:owner|name)\s*[:\-]?\s*([A-Z][A-Za-z\s\.]{3,60})/i, /(?:s\/o|w\/o|d\/o)[\s:.\-]*([A-Z][A-Za-z\s\.]{3,60})/i]);
   }
   else if (docType === 'dl') {
-    out.driver_license_no = grab([/(?:license|licence|DL)\s*(?:no|number)?[\s:.\-]*([A-Z0-9]{10,20})/i]);
+    out.driver_license_no = grab([/(?:license|licence|DL)\s*(?:no|number)?[\s:.\-]*([A-Z0-9\-\/]{10,20})/i, /\b([A-Z]{2}[-\s]?\d{2}[-\s]?\d{4}[-\s]?\d{7})\b/]);
     out.driver_name = grab([/(?:name)\s*[:\-]?\s*([A-Z][A-Za-z\s\.]{3,60})/i]);
   }
-  // Note: Aadhaar/PAN ka koi data form mein nahi jata, isliye uske liye kuch extract nahi karenge.
 
   return Object.fromEntries(Object.entries(out).filter(([_,v]) => v));
 }
@@ -182,6 +173,7 @@ function setView(v, opts={}) { state.view = v; Object.assign(state, opts); rende
 function startNewClaim() {
   state.current = { id: uid(), insurer: INSURERS[0].name, vehicleType: '', fields: {}, photos: [], createdAt: new Date().toISOString() };
   state.docStatus = {};
+  state.fileNames = {};
   state.extractedData = { policy: {}, rc: {}, dl: {} };
   state.wizardStep = 1; setView('wizard');
 }
@@ -247,10 +239,34 @@ function wizardStep1() {
 function setInsurer(val) { state.current.insurer = val; }
 function pickVehicle(id) { state.current.vehicleType = id; state.wizardStep = 2; render(); }
 
+// Helper to render individual upload boxes
+function renderDocUploadBox(docType, label, icon) {
+  const fileName = state.fileNames[docType];
+  const isUploaded = !!state.docStatus[docType];
+  
+  return `<div class="border rounded-lg p-3 mb-3 bg-white ${isUploaded ? 'border-green-400 bg-green-50' : 'border-gray-200'}">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-xl">${icon}</span>
+        <div>
+          <p class="text-sm font-semibold text-gray-800">${label}</p>
+          ${isUploaded ? `<p class="text-[10px] text-green-600 font-medium truncate max-w-[150px]">✓ ${esc(fileName)}</p>` : `<p class="text-[10px] text-gray-500">Select PDF or Image</p>`}
+        </div>
+      </div>
+      <div>
+        ${isUploaded 
+          ? `<button onclick="removeDoc('${docType}')" class="text-red-500 text-xs px-2 py-1 border border-red-200 rounded bg-red-50">Remove</button>`
+          : `<label class="bg-[#1E3A8A] text-white text-xs px-3 py-2 rounded-lg cursor-pointer flex items-center gap-1">Upload <input type="file" accept="image/*,application/pdf" onchange="handleSingleUpload(event, '${docType}')" class="hidden"/></label>`
+        }
+      </div>
+    </div>
+  </div>`;
+}
+
 function wizardStep2() {
   const c = state.current; const grouped = {}; FORM_FIELDS.forEach(f => { (grouped[f.section] = grouped[f.section] || []).push(f); });
   
-  // Check for Name Mismatch (RC vs Policy)
+  // Check for Name Mismatch
   let mismatchAlert = '';
   if (state.extractedData.policy?.insured_name && state.extractedData.rc?.insured_name) {
     const pName = state.extractedData.policy.insured_name.toLowerCase().replace(/[^a-z]/g, '');
@@ -262,37 +278,15 @@ function wizardStep2() {
     }
   }
 
-  const docList = [
-    { id: 'policy', label: 'Insurance Policy' },
-    { id: 'rc', label: 'RC (Registration)' },
-    { id: 'dl', label: 'Driving License' },
-    { id: 'aadhaar', label: 'Aadhaar / PAN' }
-  ];
-  const docStatusHtml = docList.map(doc => `
-    <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-100 last:border-0 text-xs">
-      <span class="text-gray-700 font-medium">${doc.label} ${doc.id === 'aadhaar' ? '(Optional)' : ''}</span>
-      <span class="px-2 py-1 rounded-full font-bold ${state.docStatus[doc.id] ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}">
-        ${state.docStatus[doc.id] ? '✓ Uploaded' : 'Pending'}
-      </span>
-    </div>
-  `).join('');
-
   return `<div class="card p-4 mb-4 border-2 border-[#1E3A8A]">
       <p class="text-sm text-gray-800 mb-3 font-bold flex items-center gap-2">📄 Step A: Upload Documents (Auto-fill)</p>
       
       ${mismatchAlert}
 
-      <div class="mb-4 bg-gray-50 p-3 rounded-lg border">
-        <p class="text-xs font-semibold text-gray-600 mb-2 uppercase">Upload Status:</p>
-        ${docStatusHtml}
-      </div>
-
-      <label class="block w-full bg-blue-50 border-2 border-dashed border-[#1E3A8A] rounded-xl p-4 text-center cursor-pointer active:bg-blue-100 transition">
-        <span class="text-2xl block mb-1">📁</span>
-        <span class="text-sm font-bold text-[#1E3A8A]">Tap to Choose Files</span>
-        <p class="text-[10px] text-gray-500 mt-1">Select PDF or Images (Policy, RC, DL)</p>
-        <input type="file" multiple accept="image/*,application/pdf" onchange="handleUpload(event)" class="hidden"/>
-      </label>
+      ${renderDocUploadBox('policy', 'Insurance Policy', '📄')}
+      ${renderDocUploadBox('rc', 'RC (Registration)', '🚗')}
+      ${renderDocUploadBox('dl', 'Driving License', '🪪')}
+      ${renderDocUploadBox('aadhaar', 'Aadhaar / PAN (Optional)', '🆔')}
       
       ${state.busy ? `<div class="mt-3 flex items-center justify-center gap-2 text-sm font-semibold text-[#1E3A8A] bg-blue-50 p-2 rounded"><span class="spinner"></span>${esc(state.busyMsg)}</div>` : ''}
     </div>
@@ -314,52 +308,50 @@ function renderField(f, value) {
 
 function setField(key, val) { state.current.fields[key] = val; }
 
-async function handleUpload(event) {
-  const files = Array.from(event.target.files || []); if (!files.length) return;
-  state.busy = true; render();
+function removeDoc(docType) {
+  state.docStatus[docType] = false;
+  delete state.fileNames[docType];
+  render();
+}
+
+// Handle Single Document Upload
+async function handleSingleUpload(event, docType) {
+  const file = event.target.files?.[0]; if (!file) return;
   
-  for (let i = 0; i < files.length; i++) {
-    const fileName = files[i].name.toLowerCase();
-    let docType = 'other';
+  state.busy = true; 
+  state.busyMsg = `Scanning ${docType.toUpperCase()}... 0%`; 
+  render();
+
+  try {
+    const txt = await runOCR(file, (p) => { 
+      state.busyMsg = `Scanning ${docType.toUpperCase()}... ${Math.round(p*100)}%`; 
+      const el = document.querySelector('.spinner')?.parentElement; 
+      if (el) el.lastChild.textContent = state.busyMsg; 
+    });
     
-    // Identify document type from filename
-    if (fileName.includes('policy')) docType = 'policy';
-    else if (fileName.includes('rc')) docType = 'rc';
-    else if (fileName.includes('dl') || fileName.includes('license')) docType = 'dl';
-    else if (fileName.includes('aadhaar') || fileName.includes('pan')) docType = 'aadhaar';
+    const extracted = extractFromText(txt, docType); 
     
+    // Mark uploaded
     state.docStatus[docType] = true;
-    state.busyMsg = `Scanning ${docType.toUpperCase()} (${i+1}/${files.length})... 0%`; render();
+    state.fileNames[docType] = file.name;
 
-    try {
-      const txt = await runOCR(files[i], docType, (p) => { 
-        state.busyMsg = `Scanning ${docType.toUpperCase()}... ${Math.round(p*100)}%`; 
-        const el = document.querySelector('.spinner')?.parentElement; 
-        if (el) el.lastChild.textContent = state.busyMsg; 
-      });
-      
-      const extracted = extractFromText(txt, docType); 
-      
-      // Store in extractedData for cross-checking
-      if (docType === 'policy' || docType === 'rc' || docType === 'dl') {
-        state.extractedData[docType] = { ...state.extractedData[docType], ...extracted };
-      }
-      
-      // Merge into main form fields (don't overwrite if already filled manually)
-      Object.keys(extracted).forEach(key => {
-        if (!state.current.fields[key]) {
-          state.current.fields[key] = extracted[key];
-        }
-      });
-
-    } catch(e) { 
-      console.error(e); 
-      alert("Error reading " + files[i].name + "\nIt might be a password protected PDF.");
+    // Store for mismatch check
+    if (docType === 'policy' || docType === 'rc' || docType === 'dl') {
+      state.extractedData[docType] = { ...state.extractedData[docType], ...extracted };
     }
+    
+    // Merge into main form fields (Auto-fill)
+    Object.keys(extracted).forEach(key => {
+      state.current.fields[key] = extracted[key];
+    });
+
+    state.busy = false; render(); 
+    toast(`✓ ${docType.toUpperCase()} scanned successfully!`);
+    
+  } catch(e) { 
+    state.busy = false; render();
+    alert("Error reading file: " + e.message);
   }
-  
-  state.busy = false; render(); 
-  toast(`✓ Documents scanned. Details check kariye.`);
 }
 
 function nextToPhotos() {
