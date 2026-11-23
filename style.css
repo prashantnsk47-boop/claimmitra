@@ -1,0 +1,22 @@
+body { font-family: Inter, system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+.card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+input, textarea, select { font-family: inherit; }
+.spinner { border: 2px solid #e5e7eb; border-top-color: #1E3A8A; border-radius: 50%; width: 18px; height: 18px; animation: spin 0.8s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* PDF Styling (A4 Format) */
+.pdf-page { width: 210mm; min-height: 297mm; padding: 10mm 15mm; background: white; color: #000; font-family: Arial, sans-serif; font-size: 10px; }
+.pdf-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px; }
+.pdf-header h1 { font-size: 16px; font-weight: bold; margin: 0; text-transform: uppercase; }
+.pdf-header p { margin: 2px 0; font-size: 10px; }
+.form-title { background: #e5e7eb; text-align: center; font-weight: bold; padding: 4px; margin-bottom: 10px; border: 1px solid #000; font-size: 12px; text-transform: uppercase; }
+.form-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+.form-table td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
+.lbl { background: #f3f4f6; font-weight: bold; font-size: 9px; width: 30%; }
+.photo-card { page-break-inside: avoid; margin-bottom: 10mm; border: 1px solid #ccc; padding: 5mm; }
+.photo-card img { max-width: 100%; max-height: 100mm; display: block; margin: 0 auto; }
+.photo-card .meta { font-size: 10px; margin-top: 2mm; }
+
+/* Alert Boxes */
+.alert-danger { background-color: #fee2e2; border: 1px solid #ef4444; color: #b91c1c; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 12px; font-weight: bold; }
+.alert-success { background-color: #dcfce7; border: 1px solid #22c55e; color: #15803d; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 12px; font-weight: bold; }
