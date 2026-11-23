@@ -28,7 +28,6 @@
   .form-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
   .form-table td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
   .lbl { background: #f3f4f6; font-weight: bold; font-size: 9px; width: 30%; }
-  .filled { color: #1E3A8A; font-weight: 900; font-size: 11px; } /* Default Blue */
 </style>
 </head>
 <body class="bg-gray-50">
@@ -157,7 +156,6 @@ function getGPS() {
 async function runOCR(file, onProgress) {
   let text = '';
   if (file.type === 'application/pdf') {
-    // Process PDF
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     for (let i = 1; i <= pdf.numPages; i++) {
@@ -173,7 +171,6 @@ async function runOCR(file, onProgress) {
       text += data.text + '\n';
     }
   } else {
-    // Process Image
     const { data } = await Tesseract.recognize(file, 'eng', { logger: (m) => { if (m.status === 'recognizing text') onProgress?.(m.progress); } });
     text = data.text;
   }
@@ -267,7 +264,7 @@ function pickVehicle(id) { state.current.vehicleType = id; state.wizardStep = 2;
 function wizardStep2() {
   const c = state.current; const grouped = {}; FORM_FIELDS.forEach(f => { (grouped[f.section] = grouped[f.section] || []).push(f); });
   
-  // Document Upload Status UI
+  // Document Upload Status UI (More clear)
   const docList = [
     { id: 'policy', label: 'Insurance Policy' },
     { id: 'rc', label: 'RC (Registration)' },
@@ -275,27 +272,38 @@ function wizardStep2() {
     { id: 'aadhaar', label: 'Aadhaar / PAN' }
   ];
   const docStatusHtml = docList.map(doc => `
-    <div class="flex items-center gap-2 mb-1 text-xs">
-      <span class="w-5 h-5 flex items-center justify-center rounded-full ${state.docStatus[doc.id] ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}">
-        ${state.docStatus[doc.id] ? '✓' : '○'}
+    <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-100 last:border-0 text-xs">
+      <span class="text-gray-700 font-medium">${doc.label}</span>
+      <span class="px-2 py-1 rounded-full font-bold ${state.docStatus[doc.id] ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}">
+        ${state.docStatus[doc.id] ? '✓ Uploaded' : 'Pending'}
       </span>
-      <span class="${state.docStatus[doc.id] ? 'text-gray-800 font-medium' : 'text-gray-500'}">${doc.label}</span>
     </div>
   `).join('');
 
-  return `<div class="card p-4 mb-4">
-      <p class="text-sm text-gray-700 mb-2 font-semibold">Option A: Documents upload kariye</p>
-      <div class="mb-3 p-2 bg-gray-50 rounded border">
+  return `<div class="card p-4 mb-4 border-2 border-[#1E3A8A]">
+      <p class="text-sm text-gray-800 mb-3 font-bold flex items-center gap-2">📄 Step A: Upload Documents (Auto-fill)</p>
+      
+      <div class="mb-4 bg-gray-50 p-3 rounded-lg border">
+        <p class="text-xs font-semibold text-gray-600 mb-2 uppercase">Upload Status:</p>
         ${docStatusHtml}
       </div>
-      <input type="file" multiple accept="image/*,application/pdf" onchange="handleUpload(event)" class="text-sm w-full border rounded p-2 bg-white"/>
-      <p class="text-[10px] text-gray-500 mt-2">Aap ek saath multiple files select kar sakte hain. (PDF aur Images dono chalenge)</p>
-      ${state.busy ? `<div class="mt-3 flex items-center gap-2 text-sm text-[#1E3A8A]"><span class="spinner"></span>${esc(state.busyMsg)}</div>` : ''}
+
+      <label class="block w-full bg-blue-50 border-2 border-dashed border-[#1E3A8A] rounded-xl p-4 text-center cursor-pointer active:bg-blue-100 transition">
+        <span class="text-2xl block mb-1">📁</span>
+        <span class="text-sm font-bold text-[#1E3A8A]">Tap to Choose Files</span>
+        <p class="text-[10px] text-gray-500 mt-1">You can select PDF or Images (Policy, RC, DL etc.)</p>
+        <input type="file" multiple accept="image/*,application/pdf" onchange="handleUpload(event)" class="hidden"/>
+      </label>
+      
+      ${state.busy ? `<div class="mt-3 flex items-center justify-center gap-2 text-sm font-semibold text-[#1E3A8A] bg-blue-50 p-2 rounded"><span class="spinner"></span>${esc(state.busyMsg)}</div>` : ''}
     </div>
-    <p class="text-xs text-gray-500 text-center mb-3">— ya —</p>
-    <p class="text-sm text-gray-700 mb-3 font-semibold">Option B: Manually details verify/bhariye</p>
+
+    <p class="text-xs text-gray-500 text-center mb-3 font-semibold">— OR Fill Manually —</p>
+    
+    <p class="text-sm text-gray-700 mb-3 font-semibold">Step B: Verify Details</p>
     ${Object.entries(grouped).map(([section, fields]) => `<div class="mb-4"><p class="text-xs font-bold text-[#1E3A8A] uppercase mb-2">${section}</p><div class="space-y-2">${fields.map(f => renderField(f, c.fields[f.key])).join('')}</div></div>`).join('')}
-    <button onclick="nextToPhotos()" class="w-full bg-[#F59E0B] text-white p-4 rounded-xl font-semibold mt-4">Next: Capture Photos →</button>`;
+    
+    <button onclick="nextToPhotos()" class="w-full bg-[#F59E0B] text-white p-4 rounded-xl font-bold mt-4 shadow-lg active:scale-95 transition">Next: Capture Photos →</button>`;
 }
 
 function renderField(f, value) {
@@ -314,7 +322,7 @@ async function handleUpload(event) {
   for (let i = 0; i < files.length; i++) {
     const fileName = files[i].name.toLowerCase();
     
-    // Guess doc type from filename
+    // Guess doc type from filename (For UI display)
     if (fileName.includes('policy')) state.docStatus.policy = true;
     else if (fileName.includes('rc')) state.docStatus.rc = true;
     else if (fileName.includes('dl') || fileName.includes('license')) state.docStatus.dl = true;
@@ -323,9 +331,16 @@ async function handleUpload(event) {
     
     state.busyMsg = `Scanning ${i+1}/${files.length}... 0%`; render();
     try {
-      const txt = await runOCR(files[i], (p) => { state.busyMsg = `Scanning ${i+1}/${files.length}... ${Math.round(p*100)}%`; const el = document.querySelector('.spinner')?.parentElement; if (el) el.lastChild.textContent = state.busyMsg; });
+      const txt = await runOCR(files[i], (p) => { 
+        state.busyMsg = `Scanning ${i+1}/${files.length}... ${Math.round(p*100)}%`; 
+        const el = document.querySelector('.spinner')?.parentElement; 
+        if (el) el.lastChild.textContent = state.busyMsg; 
+      });
       allText += '\n' + txt;
-    } catch(e) { console.error(e); }
+    } catch(e) { 
+      console.error(e); 
+      alert("Error reading file: " + files[i].name + "\nIt might be a password protected PDF or a corrupted file.");
+    }
   }
   
   const extracted = extractFromText(allText); 
@@ -347,243 +362,4 @@ function wizardStep3() {
     <div class="space-y-3">${required.map((shotId) => {
         const shot = SHOT_LABELS[shotId]; const existing = c.photos.find(p => p.shotType === shotId);
         return `<div class="card p-3 ${existing?'ring-2 ring-green-400':''}"><div class="flex items-start gap-3">
-              <div class="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">${existing ? `<img src="${existing.dataUrl}" class="w-full h-full object-cover"/>` : '<span class="text-2xl">📷</span>'}</div>
-              <div class="flex-1 min-w-0"><p class="font-semibold text-sm flex items-center gap-1">${existing ? '✓' : ''} ${shot.label}</p><p class="text-xs text-gray-500 mt-1 leading-snug">${shot.hint}</p>
-                <label class="inline-block mt-2 bg-[#1E3A8A] text-white text-xs px-3 py-2 rounded-lg cursor-pointer">${existing ? 'Retake' : 'Take Photo'}<input type="file" accept="image/*" capture="environment" class="hidden" onchange="capturePhoto(event, '${shotId}')"/></label></div></div></div>`;
-      }).join('')}</div>
-    <button onclick="if(${done}<${required.length}){if(!confirm('Kuch photos pending hain. Phir bhi aage badhein?'))return;}state.wizardStep=4;render();" class="w-full bg-[#F59E0B] text-white p-4 rounded-xl font-semibold mt-4">${done===required.length ? 'Next: Review →' : `Skip (${required.length-done} pending) →`}</button>`;
-}
-
-async function capturePhoto(event, shotId) {
-  const file = event.target.files?.[0]; if (!file) return;
-  state.busy = true; state.busyMsg = 'GPS fetch + watermark...'; render();
-  try {
-    const gps = await getGPS(); const shot = SHOT_LABELS[shotId]; const dataUrl = await processImage(file, gps, shot.label); const c = state.current;
-    c.photos = c.photos.filter(p => p.shotType !== shotId);
-    c.photos.push({ shotType: shotId, dataUrl, gps: gps, capturedAt: new Date().toISOString() });
-    state.busy = false; render(); toast(gps ? '✓ Photo saved with GPS' : '✓ Photo saved (GPS unavailable)');
-  } catch (e) { state.busy = false; render(); alert('Photo processing failed: ' + e.message); }
-}
-
-function wizardStep4() {
-  const c = state.current; const required = SHOT_CONFIG[c.vehicleType] || SHOT_CONFIG.car;
-  const photosDone = required.filter(id => c.photos.find(p => p.shotType === id)).length;
-  return `<div class="card p-4 mb-3">
-      <p class="text-xs text-gray-500 font-semibold mb-1">Insurer: <span class="text-[#1E3A8A]">${esc(c.insurer)}</span></p>
-      <p class="font-semibold">${esc(c.fields.vehicle_no || 'Not set')} · ${VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.label || ''}</p>
-      <p class="text-xs text-gray-500 mt-1">Policy: ${esc(c.fields.policy_no || 'Not set')}</p>
-      <p class="text-xs text-gray-500 mt-1">Photos: ${photosDone}/${required.length}</p>
-      <p class="text-xs text-gray-500 mt-1">Insured: ${esc(c.fields.insured_name || 'Not set')}</p>
-    </div>
-    <div class="space-y-3">
-      <button onclick="generateClaimPDF()" class="w-full bg-[#1E3A8A] text-white p-4 rounded-xl font-semibold text-left">📄 Download Claim Form PDF<p class="text-xs opacity-80 font-normal">${esc(c.insurer)} Format (Auto-filled)</p></button>
-      <button onclick="generatePhotoPDF()" class="w-full bg-[#1E3A8A] text-white p-4 rounded-xl font-semibold text-left">📸 Download Photo Report PDF<p class="text-xs opacity-80 font-normal">${c.photos.length} photos with GPS + timestamp</p></button>
-      <button onclick="saveAndFinish()" class="w-full bg-[#F59E0B] text-white p-4 rounded-xl font-semibold">💾 Save Claim & Go Home</button>
-    </div>`;
-}
-
-async function saveAndFinish() {
-  const c = state.current; const idx = state.claims.findIndex(x => x.id === c.id);
-  if (idx >= 0) state.claims[idx] = c; else state.claims.push(c);
-  await saveClaims(); toast('✓ Claim saved locally'); setTimeout(() => { state.current = null; setView('home'); }, 600);
-}
-
-// --- Dynamic Company & Vehicle PDF Generation ---
-async function generateClaimPDF() {
-  const c = state.current; const f = c.fields;
-  const isComm = VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.isCommercial;
-  const insurerObj = INSURERS.find(i => i.name === c.insurer) || INSURERS[0]; 
-  
-  // Helper to format data with Company Color
-  const d = (val) => val ? `<span style="color: ${insurerObj.color}; font-weight: 900; font-size: 11px;">${esc(val)}</span>` : '';
-
-  let formHTML = '';
-
-  if (isComm) {
-    // === COMMERCIAL VEHICLE FORM ===
-    formHTML = `
-      <div class="pdf-header" style="border-bottom-color: ${insurerObj.color};">
-        <h1 style="color: ${insurerObj.color};">${esc(c.insurer).toUpperCase()}</h1>
-        <p>Registered & Head Office, Chennai.</p>
-      </div>
-      <div class="form-title" style="background-color: ${insurerObj.bg}; color: ${insurerObj.color}; border-color: ${insurerObj.color};">MOTOR CLAIM FORM - COMMERCIAL VEHICLE</div>
-      <div style="font-size: 9px; margin-bottom:10px; border:1px solid #000; padding:5px;">
-        <b>THE ISSUE OF THIS FORM IS NOT TO BE TAKEN AS AN ADMISSION OF LIABILITY</b><br>
-        <b>INSTRUCTIONS:</b> Complete the form fully without leaving any relevant information.
-      </div>
-
-      <table class="form-table">
-        <tr>
-          <td class="lbl">CLAIM NUMBER (Office Use)</td><td></td>
-          <td class="lbl">POLICY NUMBER</td><td>${d(f.policy_no)}</td>
-        </tr>
-        <tr>
-          <td class="lbl">POLICY PERIOD</td><td></td>
-          <td class="lbl">INSURED NAME</td><td>${d(f.insured_name)}</td>
-        </tr>
-        <tr>
-          <td class="lbl">INSURED'S ADDRESS</td><td colspan="3"></td>
-        </tr>
-        <tr>
-          <td class="lbl">Mobile</td><td>${d(f.mobile)}</td>
-          <td class="lbl">E-Mail</td><td>${d(f.email)}</td>
-        </tr>
-      </table>
-
-      <table class="form-table">
-        <tr>
-          <td class="lbl">VEHICLE TYPE</td>
-          <td colspan="3">Goods Vehicle [ ] &nbsp; Passenger Vehicle [ ] &nbsp; <b>${d(VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.label)}</b></td>
-        </tr>
-        <tr>
-          <td class="lbl">Registration Number</td><td>${d(f.vehicle_no)}</td>
-          <td class="lbl">Registration Date</td><td></td>
-        </tr>
-        <tr>
-          <td class="lbl">Chassis Number</td><td>${d(f.chassis_no)}</td>
-          <td class="lbl">Engine Number</td><td>${d(f.engine_no)}</td>
-        </tr>
-        <tr>
-          <td class="lbl">Make</td><td></td>
-          <td class="lbl">Hypothecation Details</td><td></td>
-        </tr>
-      </table>
-
-      <table class="form-table">
-        <tr>
-          <td class="lbl">CLAIM TYPE</td>
-          <td colspan="3">Accident [ ] &nbsp; Theft [ ] &nbsp; Others [ ] &nbsp; <b>${d(f.type_of_loss)}</b></td>
-        </tr>
-        <tr>
-          <td class="lbl">Date of loss</td><td>${d(f.accident_date)}</td>
-          <td class="lbl">Place of Accident / Theft</td><td>${d(f.place_of_loss)}</td>
-        </tr>
-        <tr>
-          <td class="lbl">Provide brief description of accident / theft.</td>
-          <td colspan="3" style="height: 40px;">${d(f.description)}</td>
-        </tr>
-      </table>
-
-      <table class="form-table">
-        <tr>
-          <td class="lbl" rowspan="2">LOSS DESCRIPTION<br>Person driving was</td>
-          <td colspan="3">Owner [ ] &nbsp; Friend / Relative [ ] &nbsp; Paid Driver [ ] &nbsp; If driver, years of service: ____</td>
-        </tr>
-        <tr>
-          <td colspan="3">Driver Name: ${d(f.driver_name)} <br> Driving Licence Number: ${d(f.driver_license_no)}</td>
-        </tr>
-      </table>
-
-      <div style="page-break-before: always;"></div>
-
-      <!-- PAGE 2 -->
-      <div class="pdf-header" style="border-bottom-color: ${insurerObj.color};">
-        <h1 style="color: ${insurerObj.color};">${esc(c.insurer).toUpperCase()}</h1>
-        <p>MOTOR CLAIM FORM - COMMERCIAL VEHICLE</p>
-      </div>
-      
-      <table class="form-table">
-        <tr><td class="lbl" rowspan="2">ADDITIONAL LOSS DETAILS</td><td class="lbl">Commercial Vehicle Info</td><td>Registered laden weight: _______ kg</td></tr>
-        <tr><td class="lbl">Type of Goods carried</td><td></td></tr>
-        <tr><td class="lbl" rowspan="2">Permit / Fitness Certificate</td><td class="lbl">Permit valid for area(s)</td><td>${d(f.permit_no)}</td></tr>
-        <tr><td class="lbl">Fitness valid up to</td><td>${d(f.fitness_valid_upto)}</td></tr>
-      </table>
-
-      <table class="form-table">
-        <tr><td class="lbl" rowspan="2">WORKSHOP DETAILS</td><td class="lbl">Location where vehicle can be inspected</td><td></td></tr>
-        <tr><td class="lbl">Loss Estimate</td><td>${d(f.estimated_repair_cost)}</td></tr>
-      </table>
-
-      <table class="form-table">
-        <tr><td class="lbl" rowspan="2">FIR DETAILS</td><td class="lbl">Loss Reported to police</td><td>${d(f.police_report_lodged)}</td></tr>
-        <tr><td class="lbl">FIR / Crime diary number</td><td>${d(f.fir_no)}</td></tr>
-      </table>
-
-      <div style="border: 1px solid #000; padding: 10px; margin-top: 15px; font-size: 9px;">
-        <b>DECLARATION BY INSURED</b><br><br>
-        I/We the above named, do hereby, to the best of my / our knowledge and belief, warrant, the truth of the foregoing statement in every respect.<br><br><br>
-        Date: ____________ &nbsp;&nbsp;&nbsp;&nbsp; Place: ____________ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>Signature of Insured / Claimant</b>
-      </div>
-    `;
-  } else {
-    // === PRIVATE CAR STANDARD FORM ===
-    formHTML = `
-      <div class="pdf-header" style="border-bottom-color: ${insurerObj.color};">
-        <h1 style="color: ${insurerObj.color};">${esc(c.insurer).toUpperCase()}</h1>
-        <p>MOTOR CLAIM FORM - PRIVATE CAR</p>
-      </div>
-      <div class="form-title" style="background-color: ${insurerObj.bg}; color: ${insurerObj.color}; border-color: ${insurerObj.color};">MOTOR INSURANCE CLAIM FORM</div>
-      
-      <table class="form-table">
-        <tr><td class="lbl">Policy Number</td><td>${d(f.policy_no)}</td><td class="lbl">Date of Loss</td><td>${d(f.accident_date)}</td></tr>
-        <tr><td class="lbl">Insured Name</td><td>${d(f.insured_name)}</td><td class="lbl">Mobile</td><td>${d(f.mobile)}</td></tr>
-        <tr><td class="lbl">Vehicle Number</td><td>${d(f.vehicle_no)}</td><td class="lbl">Engine Number</td><td>${d(f.engine_no)}</td></tr>
-        <tr><td class="lbl">Chassis Number</td><td>${d(f.chassis_no)}</td><td class="lbl">Place of Accident</td><td>${d(f.place_of_loss)}</td></tr>
-        <tr><td class="lbl">Type of Loss</td><td>${d(f.type_of_loss)}</td><td class="lbl">Est. Repair Cost</td><td>${d(f.estimated_repair_cost)}</td></tr>
-      </table>
-
-      <table class="form-table">
-        <tr><td class="lbl">Brief Description of Accident</td><td colspan="3" style="height: 40px;">${d(f.description)}</td></tr>
-      </table>
-
-      <table class="form-table">
-        <tr><td class="lbl">Driver Name</td><td>${d(f.driver_name)}</td><td class="lbl">Driver License No</td><td>${d(f.driver_license_no)}</td></tr>
-        <tr><td class="lbl">Police Report Lodged</td><td>${d(f.police_report_lodged)}</td><td class="lbl">FIR / GD No</td><td>${d(f.fir_no)}</td></tr>
-      </table>
-
-      <div style="border: 1px solid #000; padding: 10px; margin-top: 15px; font-size: 9px;">
-        <b>DECLARATION BY INSURED</b><br><br>
-        I/We hereby declare that the information given above is true and correct to the best of my/our knowledge and belief. I/We further declare that the loss/damage was not caused by any willful act or negligence on my/our part.<br><br><br>
-        Date: ____________ &nbsp;&nbsp;&nbsp;&nbsp; Place: ____________ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>Signature of Insured</b>
-      </div>
-    `;
-  }
-
-  const html = `
-    <div class="pdf-page">
-      ${formHTML}
-      <p style="font-size:8px;color:#999;text-align:center;margin-top:15px;">Generated by ClaimMitra — Verify all details before submission</p>
-    </div>`;
-    
-  await renderPDFToDownload(html, `ClaimForm_${f.vehicle_no || 'claim'}.pdf`);
-}
-
-async function generatePhotoPDF() {
-  const c = state.current;
-  const photosHtml = c.photos.map(p => `<div class="photo-card"><img src="${p.dataUrl}" alt="${esc(p.shotType)}"/><div class="meta"><strong>${esc(SHOT_LABELS[p.shotType]?.label || p.shotType)}</strong><br/>Captured: ${esc(new Date(p.capturedAt).toLocaleString('en-IN'))}<br/>GPS: ${p.gps ? `${p.gps.lat.toFixed(6)}, ${p.gps.lng.toFixed(6)}` : 'Not available'}</div></div>`).join('');
-  const html = `<div class="pdf-page"><div style="text-align:center;padding:20mm 0;border-bottom:2px solid #1E3A8A;"><h1 style="color:#1E3A8A;font-size:24px;">VEHICLE INSPECTION REPORT</h1><p style="margin-top:5mm;font-size:11px;">Generated by ClaimMitra</p></div>
-      <h2>Claim Summary</h2><table class="form-table"><tr><td class="lbl">Insurer</td><td>${esc(c.insurer)}</td></tr><tr><td class="lbl">Vehicle Number</td><td>${esc(c.fields.vehicle_no || '-')}</td></tr><tr><td class="lbl">Policy Number</td><td>${esc(c.fields.policy_no || '-')}</td></tr><tr><td class="lbl">Vehicle Type</td><td>${esc(VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.label || '-')}</td></tr><tr><td class="lbl">Insured Name</td><td>${esc(c.fields.insured_name || '-')}</td></tr><tr><td class="lbl">Inspection Date</td><td>${new Date().toLocaleDateString('en-IN')}</td></tr><tr><td class="lbl">Photos Attached</td><td>${c.photos.length}</td></tr></table>
-      <div style="page-break-before:always;"></div><h2>Photographic Evidence</h2>${photosHtml || '<p style="font-size:11px;color:#666;">No photos captured.</p>'}</div>`;
-  await renderPDFToDownload(html, `PhotoReport_${c.fields.vehicle_no || 'claim'}.pdf`);
-}
-
-async function renderPDFToDownload(html, filename) {
-  const holder = document.getElementById('pdf-holder'); holder.innerHTML = html; const el = holder.querySelector('.pdf-page');
-  try {
-    await html2pdf().set({ margin: 0, filename: filename, image: { type: 'jpeg', quality: 0.92 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(el).save();
-    toast('✓ PDF downloaded');
-  } catch (e) { alert('PDF error: ' + e.message); } finally { holder.innerHTML = ''; }
-}
-
-function renderInsurers() {
-  return `<div class="max-w-md mx-auto min-h-screen bg-white pb-8"><header class="bg-[#1E3A8A] text-white p-4 flex items-center gap-3"><button onclick="setView('home')" class="text-2xl leading-none">‹</button><div><p class="font-semibold">Insurer Helplines</p><p class="text-xs opacity-80">Claim intimation ke liye call kariye</p></div></header>
-    <main class="p-4 space-y-2"><p class="text-xs text-gray-500 mb-2">Numbers verify kar lijiye company website par — yeh general info hai.</p>
-      ${INSURERS.map(i => `<div class="card p-3"><p class="font-semibold text-sm">${esc(i.name)}</p><div class="flex gap-2 mt-2 text-xs"><a href="tel:18001800" class="bg-[#1E3A8A] text-white px-3 py-2 rounded-lg">📞 Call Support</a></div></div>`).join('')}
-    </main></div>`;
-}
-
-function renderSettings() {
-  return `<div class="max-w-md mx-auto min-h-screen bg-white pb-8"><header class="bg-[#1E3A8A] text-white p-4 flex items-center gap-3"><button onclick="setView('home')" class="text-2xl leading-none">‹</button><p class="font-semibold">Settings</p></header>
-    <main class="p-4 space-y-3"><div class="card p-4"><p class="font-semibold text-sm">About</p><p class="text-xs text-gray-600 mt-1">ClaimMitra — frontend-only motor claim assistant. Sab data aapke device par (IndexedDB) locally save hota hai. Koi server nahi.</p></div>
-      <button onclick="if(confirm('Saare local claims delete karein? Yeh undo nahi hoga.')){idbKeyval.del('claims').then(()=>{state.claims=[];toast('✓ Cleared');render();});}" class="w-full bg-red-50 text-red-700 p-4 rounded-xl font-semibold text-sm">🗑 Clear All Local Data</button></main></div>`;
-}
-
-function loadDemo() {
-  const demo = { id: uid(), insurer: 'United India Insurance', vehicleType: 'truck', fields: { policy_no: 'MOT/2024/1234567', vehicle_no: 'MH12AB1234', engine_no: 'ENG12345678', chassis_no: 'MA3ABC12345678901', insured_name: 'Rajesh Kumar Sharma', mobile: '9876543210', email: 'rajesh@example.com', accident_date: '2025-01-15', place_of_loss: 'Mumbai-Pune Highway, Near Khopoli Toll', type_of_loss: 'Accident', estimated_repair_cost: '35000', description: 'Rear bumper damaged in minor collision at toll plaza', driver_name: 'Rajesh Kumar Sharma', driver_license_no: 'MH1220180012345', police_report_lodged: 'No' }, photos: [], createdAt: new Date().toISOString() };
-  state.current = demo; state.wizardStep = 4; setView('wizard'); toast('Demo loaded — try PDF buttons');
-}
-
-(async function init() { await loadClaims(); render(); })();
-</script>
-</body>
-</html>
+              <div class="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">${existing ? `<img src="${existing.dataUrl}" class="w-full h
