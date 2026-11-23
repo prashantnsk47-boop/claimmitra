@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ClaimMitra - Motor Claim Assistant</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/idb-keyval@6/dist/umd.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: Inter, system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+  .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  input, textarea, select { font-family: inherit; }
+  .btn-primary { background: #1E3A8A; color: white; }
+  .btn-accent { background: #F59E0B; color: white; }
+  .spinner { border: 2px solid #e5e7eb; border-top-color: #1E3A8A; border-radius: 50%; width: 18px; height: 18px; animation: spin 0.8s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pdf-page { width: 210mm; min-height: 297mm; padding: 15mm; background: white; color: #000; font-size: 11px; font-family: Arial, sans-serif; }
+  .pdf-page h1 { font-size: 20px; margin: 0 0 4px; }
+  .pdf-page h2 { font-size: 13px; background: #1E3A8A; color: white; padding: 4px 8px; margin: 10px 0 6px; }
+  .pdf-page table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+  .pdf-page td { border: 1px solid #ccc; padding: 4px 6px; vertical-align: top; font-size: 10px; }
+  .pdf-page td.lbl { background: #f3f4f6; font-weight: 600; width: 35%; }
+  .photo-card { page-break-inside: avoid; margin-bottom: 10mm; border: 1px solid #ccc; padding: 5mm; }
+  .photo-card img { max-width: 100%; max-height: 100mm; display: block; margin: 0 auto; }
+  .photo-card .meta { font-size: 10px; margin-top: 2mm; }
+</style>
+</head>
+<body class="bg-gray-50">
+<div id="app"></div>
+<div id="pdf-holder" style="position:fixed;left:-9999px;top:0;"></div>
+
+<script>
+const VEHICLE_TYPES = [
+  { id: 'car', label: 'Car', emoji: '🚗' }, { id: 'pickup', label: 'Pickup', emoji: '🛻' },
+  { id: 'truck', label: 'Truck', emoji: '🚚' }, { id: 'bus', label: 'Passenger Bus', emoji: '🚌' },
+  { id: 'schoolbus', label: 'School Bus', emoji: '🚌' }, { id: 'tipper', label: 'Tipper', emoji: '🚛' },
+  { id: 'tractor', label: 'Tractor', emoji: '🚜' },
+];
+const SHOT_CONFIG = {
+  car: ['front','rear','left','right','chassis','odometer','damage'],
+  pickup: ['front','rear','left','right','chassis','odometer','damage','permit'],
+  truck: ['front','rear','left','right','chassis','odometer','damage','permit'],
+  bus: ['front','rear','left','right','chassis','odometer','damage','permit'],
+  schoolbus: ['front','rear','left','right','chassis','odometer','damage','permit'],
+  tipper: ['front','rear','left','right','chassis','odometer','damage','permit'],
+  tractor: ['front','rear','left','right','chassis','hourmeter','damage'],
+};
+const SHOT_LABELS = {
+  front:    { label: 'Front View',      hint: 'Stand 2.5-3m away. Poora vehicle + number plate dikhna chahiye.' },
+  rear:     { label: 'Rear View',       hint: 'Rear side ka poora view. Number plate clear ho.' },
+  left:     { label: 'Left Side',       hint: 'Left side ka poora profile.' },
+  right:    { label: 'Right Side',      hint: 'Right side ka poora profile.' },
+  chassis:  { label: 'Chassis Number',  hint: 'Chassis number ka close-up. Agar dikh na rahe to pencil se paper par rub karke photo lein.' },
+  odometer: { label: 'Odometer Reading',hint: 'Odometer ka close-up. KM reading clear ho.' },
+  hourmeter:{ label: 'Hour Meter',      hint: 'Tractor ka hour meter close-up.' },
+  damage:   { label: 'Damage Close-Up', hint: 'Damaged area ka close-up. Number plate bhi frame mein ho to better.' },
+  permit:   { label: 'Permit / Fitness',hint: 'Permit / fitness certificate ki clear photo.' },
+};
+const INSURERS = [
+  { name: 'ICICI Lombard', tollfree: '1800 2666', email: 'customersupport@icicilombard.com' },
+  { name: 'HDFC ERGO', tollfree: '1800 2666 440', email: 'care@hdfcergo.com' },
+  { name: 'Bajaj Allianz', tollfree: '1800 209 5858', email: 'customercare@bajajallianz.co.in' },
+  { name: 'TATA AIG', tollfree: '1800 266 7780', email: 'customersupport@tataaig.com' },
+  { name: 'New India Assurance', tollfree: '1800 209 1415', email: 'info@newindia.co.in' },
+  { name: 'Oriental Insurance', tollfree: '1800 11 8485', email: 'oriental@orientalinsurance.org.in' },
+  { name: 'National Insurance', tollfree: '1800 345 0330', email: 'info@nic.co.in' },
+  { name: 'United India', tollfree: '1800 425 33333', email: 'info@uiic.co.in' },
+  { name: 'Acko General', tollfree: '1800 266 2256', email: 'help@acko.com' },
+  { name: 'Go Digit', tollfree: '1800 258 5959', email: 'hello@godigit.com' },
+  { name: 'Reliance General', tollfree: '1800 300 9000', email: 'care@reliancegeneral.co.in' },
+  { name: 'SBI General', tollfree: '1800 102 1111', email: 'customer.care@sbigeneral.in' },
+];
+const FORM_FIELDS = [
+  { key:'policy_no', label:'Policy Number', section:'Policy Details' }, { key:'vehicle_no', label:'Vehicle Number', section:'Policy Details' },
+  { key:'engine_no', label:'Engine Number', section:'Policy Details' }, { key:'chassis_no', label:'Chassis Number', section:'Policy Details' },
+  { key:'insured_name', label:'Insured Name', section:'Insured Details' }, { key:'mobile', label:'Mobile', section:'Insured Details', type:'tel' },
+  { key:'email', label:'Email', section:'Insured Details', type:'email' }, { key:'accident_date', label:'Accident Date', section:'Loss Details', type:'date' },
+  { key:'accident_time', label:'Accident Time', section:'Loss Details', type:'time' }, { key:'place_of_loss', label:'Place of Loss', section:'Loss Details' },
+  { key:'type_of_loss', label:'Type of Loss', section:'Loss Details', type:'select', options:['','Damage','Theft','Third Party'] },
+  { key:'estimated_repair_cost', label:'Estimated Repair Cost (₹)', section:'Loss Details', type:'number' },
+  { key:'description', label:'Short Description of Accident', section:'Loss Details', type:'textarea' },
+  { key:'driver_name', label:'Driver Name', section:'Driver Details' }, { key:'driver_license_no', label:'Driver License No', section:'Driver Details' },
+  { key:'permit_no', label:'Permit Number', section:'Commercial Vehicle Details' }, { key:'fitness_valid_upto', label:'Fitness Valid Upto', section:'Commercial Vehicle Details', type:'date' },
+  { key:'police_report_lodged', label:'Police Report Lodged', section:'Police Report', type:'select', options:['','Yes','No'] },
+  { key:'fir_no', label:'FIR / GD Number', section:'Police Report' },
+];
+const STAGE_NAMES = ['Claim Intimated','Documents Submitted','Surveyor Allocated','Vehicle Inspected','Survey Report Submitted','Claim Decision','Settlement / Payment'];
+
+let state = { view: 'home', claims: [], current: null, wizardStep: 1, busy: false, busyMsg: '' };
+
+async function loadClaims() { try { state.claims = (await idbKeyval.get('claims')) || []; } catch { state.claims = []; } }
+async function saveClaims() { await idbKeyval.set('claims', state.claims); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function toast(msg, ms=2200) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1E3A8A;color:#fff;padding:10px 20px;border-radius:8px;z-index:9999;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), ms);
+}
+
+function processImage(file, coords, shotLabel) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1280; let { width: w, height: h } = img;
+        if (w > h && w > MAX) { h = h * MAX / w; w = MAX; } else if (h > MAX) { w = w * MAX / h; h = MAX; }
+        const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+        const barH = Math.max(60, h * 0.09);
+        ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(0, h - barH, w, barH);
+        ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(barH * 0.28)}px Arial`;
+        ctx.fillText(shotLabel, 12, h - barH + barH * 0.32);
+        ctx.font = `${Math.round(barH * 0.24)}px Arial`;
+        const gpsText = coords ? `GPS: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : 'GPS: Not available';
+        ctx.fillText(gpsText, 12, h - barH + barH * 0.62);
+        ctx.fillText(new Date().toLocaleString('en-IN'), 12, h - barH + barH * 0.88);
+        resolve(canvas.toDataURL('image/jpeg', 0.78));
+      };
+      img.onerror = reject; img.src = e.target.result;
+    };
+    reader.onerror = reject; reader.readAsDataURL(file);
+  });
+}
+
+function getGPS() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    const timer = setTimeout(() => resolve(null), 6000);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { clearTimeout(timer); resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+      () => { clearTimeout(timer); resolve(null); }, { enableHighAccuracy: true, timeout: 5000 }
+    );
+  });
+}
+
+async function runOCR(file, onProgress) {
+  const { data } = await Tesseract.recognize(file, 'eng', { logger: (m) => { if (m.status === 'recognizing text') onProgress?.(m.progress); } });
+  return data.text;
+}
+
+function extractFromText(text) {
+  const t = text.replace(/\s+/g, ' '); const out = {};
+  const grab = (pats) => { for (const p of pats) { const m = t.match(p); if (m) return m[1].trim(); } return null; };
+  out.policy_no = grab([/policy\s*(?:no|number|#)[\s:.\-]*([A-Z0-9\-\/]{5,30})/i, /policy\s*[:\-]\s*([A-Z0-9\-\/]{5,30})/i]);
+  out.vehicle_no = grab([/\b([A-Z]{2}[-\s]?\d{1,2}[-\s]?[A-Z]{1,3}[-\s]?\d{4})\b/]);
+  out.engine_no = grab([/engine\s*(?:no|number|#)?[\s:.\-]*([A-Z0-9]{8,25})/i]);
+  out.chassis_no = grab([/chassis\s*(?:no|number|#)?[\s:.\-]*([A-Z0-9]{12,25})/i, /(?:VIN|frame)\s*(?:no|number)?[\s:.\-]*([A-Z0-9]{12,25})/i]);
+  out.insured_name = grab([/(?:insured|proposer|policy\s*holder)\s*(?:name)?[\s:.\-]*([A-Z][A-Za-z\s\.]{3,60})/i]);
+  out.mobile = grab([/(?:mobile|phone|contact|cell)[\s:.\-]*(\+?91[-\s]?\d{10}|\d{10})/i, /\b([6-9]\d{9})\b/]);
+  out.email = grab([/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/]);
+  out.driver_license_no = grab([/(?:license|licence|DL)\s*(?:no|number)?[\s:.\-]*([A-Z0-9]{10,20})/i]);
+  out.permit_no = grab([/permit\s*(?:no|number)?[\s:.\-]*([A-Z0-9\-\/]{5,25})/i]);
+  out.fir_no = grab([/(?:FIR|GD)\s*(?:no|number)?[\s:.\-]*([A-Z0-9\-\/]{3,25})/i]);
+  return Object.fromEntries(Object.entries(out).filter(([_,v]) => v));
+}
+
+function setView(v, opts={}) { state.view = v; Object.assign(state, opts); render(); window.scrollTo(0, 0); }
+function startNewClaim() {
+  state.current = { id: uid(), vehicleType: '', fields: {}, photos: [], stages: STAGE_NAMES.map(n => ({ name: n, status: 'pending', notes: '', updatedAt: null })), createdAt: new Date().toISOString() };
+  state.wizardStep = 1; setView('wizard');
+}
+function openClaim(id) { state.current = state.claims.find(c => c.id === id); if (state.current) { state.wizardStep = 2; setView('wizard'); } }
+
+function render() {
+  const app = document.getElementById('app'); let html = '';
+  switch (state.view) {
+    case 'home': html = renderHome(); break;
+    case 'wizard': html = renderWizard(); break;
+    case 'insurers': html = renderInsurers(); break;
+    case 'settings': html = renderSettings(); break;
+    default: html = renderHome();
+  }
+  app.innerHTML = html;
+}
+
+function renderHome() {
+  const recent = state.claims.slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt)).slice(0,5);
+  return `<div class="max-w-md mx-auto min-h-screen bg-white pb-8">
+    <header class="bg-[#1E3A8A] text-white p-5 pb-6 rounded-b-3xl">
+      <div class="flex items-center justify-between"><div><h1 class="text-2xl font-bold">ClaimMitra</h1><p class="text-xs opacity-80 mt-0.5">Motor Insurance Claim Assistant</p></div>
+      <a href="#" onclick="setView('settings');return false" class="text-xs bg-white/20 px-3 py-2 rounded-lg">Settings</a></div>
+    </header>
+    <main class="p-4 space-y-4">
+      <button onclick="startNewClaim()" class="w-full bg-[#F59E0B] text-white p-5 rounded-2xl shadow-md text-left active:opacity-90">
+        <p class="font-bold text-lg">+ Start New Claim</p><p class="text-sm mt-1 opacity-90">Upload docs → Auto-fill → Guided photos → PDF</p></button>
+      <div class="grid grid-cols-2 gap-3">
+        <button onclick="setView('insurers')" class="card p-4 text-left"><p class="text-2xl">📞</p><p class="font-semibold text-sm mt-1">Insurer Contacts</p><p class="text-xs text-gray-500">Toll-free numbers</p></button>
+        <button onclick="loadDemo()" class="card p-4 text-left"><p class="text-2xl">🧪</p><p class="font-semibold text-sm mt-1">Demo Claim</p><p class="text-xs text-gray-500">Try PDFs instantly</p></button>
+      </div>
+      <div><div class="flex items-center justify-between mb-2 mt-4"><p class="font-semibold text-gray-800">Recent Claims</p><span class="text-xs text-gray-400">${state.claims.length} total</span></div>
+        ${recent.length === 0 ? `<div class="card p-6 text-center text-gray-400"><p class="text-4xl mb-2">📄</p><p class="text-sm">No claims yet. Tap "Start New Claim".</p></div>` : recent.map(c => `
+          <button onclick="openClaim('${c.id}')" class="card p-3 w-full text-left mb-2 flex items-center gap-3">
+            <div class="text-2xl">${VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.emoji || '🚗'}</div>
+            <div class="flex-1 min-w-0"><p class="font-semibold text-sm truncate">${esc(c.fields?.vehicle_no || 'Vehicle not set')}</p><p class="text-xs text-gray-500 truncate">Policy: ${esc(c.fields?.policy_no || 'N/A')} · ${c.photos?.length || 0} photos</p></div>
+            <span class="text-gray-300 text-xl">›</span></button>`).join('')}
+      </div></main></div>`;
+}
+
+function renderWizard() {
+  const c = state.current; if (!c) return '<p class="p-4">No claim</p>'; let body = '';
+  if (state.wizardStep === 1) body = wizardStep1(); else if (state.wizardStep === 2) body = wizardStep2(); else if (state.wizardStep === 3) body = wizardStep3(); else body = wizardStep4();
+  const titles = ['Select Vehicle Type', 'Documents & Form', 'Vehicle Photos', 'Review & PDF'];
+  return `<div class="max-w-md mx-auto min-h-screen bg-white pb-24">
+    <header class="bg-[#1E3A8A] text-white p-4 sticky top-0 z-10"><div class="flex items-center gap-3">
+      <button onclick="if(state.wizardStep>1){state.wizardStep--;render();}else{setView('home')}" class="text-2xl leading-none">‹</button>
+      <div class="flex-1"><p class="text-xs opacity-80">Step ${state.wizardStep} of 4</p><p class="font-semibold text-sm">${titles[state.wizardStep-1]}</p></div></div>
+      <div class="mt-3 flex gap-1">${[1,2,3,4].map(i => `<div class="flex-1 h-1 rounded-full ${i<=state.wizardStep?'bg-[#F59E0B]':'bg-white/30'}"></div>`).join('')}</div>
+    </header><main class="p-4">${body}</main></div>`;
+}
+
+function wizardStep1() {
+  const c = state.current;
+  return `<p class="text-sm text-gray-600 mb-4">Kaunsi gaadi ka claim hai? Photo checklist iske hisaab se adjust hoga.</p>
+    <div class="grid grid-cols-2 gap-3">${VEHICLE_TYPES.map(v => `<button onclick="pickVehicle('${v.id}')" class="card p-4 text-center ${c.vehicleType===v.id?'ring-2 ring-[#1E3A8A] bg-blue-50':''}"><p class="text-3xl">${v.emoji}</p><p class="text-sm font-semibold mt-2">${v.label}</p></button>`).join('')}</div>`;
+}
+function pickVehicle(id) { state.current.vehicleType = id; state.wizardStep = 2; render(); }
+
+function wizardStep2() {
+  const c = state.current; const grouped = {}; FORM_FIELDS.forEach(f => { (grouped[f.section] = grouped[f.section] || []).push(f); });
+  return `<div class="card p-4 mb-4"><p class="text-sm text-gray-700 mb-2">Option A: Documents upload kariye — OCR chalega (30-60 sec per doc)</p>
+      <input type="file" multiple accept="image/*,application/pdf" onchange="handleUpload(event)" class="text-sm w-full border rounded p-2"/>
+      <p class="text-xs text-gray-500 mt-2">Policy copy, RC, DL, FIR, estimate — sab ek saath upload kariye.</p>
+      ${state.busy ? `<div class="mt-3 flex items-center gap-2 text-sm text-[#1E3A8A]"><span class="spinner"></span>${esc(state.busyMsg)}</div>` : ''}</div>
+    <p class="text-xs text-gray-500 text-center mb-3">— ya —</p><p class="text-sm text-gray-700 mb-3">Option B: Neeche form manually bhariye (faster)</p>
+    ${Object.entries(grouped).map(([section, fields]) => `<div class="mb-4"><p class="text-xs font-bold text-[#1E3A8A] uppercase mb-2">${section}</p><div class="space-y-2">${fields.map(f => renderField(f, c.fields[f.key])).join('')}</div></div>`).join('')}
+    <button onclick="nextToPhotos()" class="w-full bg-[#F59E0B] text-white p-4 rounded-xl font-semibold mt-4">Next: Capture Photos →</button>`;
+}
+
+function renderField(f, value) {
+  const common = `class="w-full border border-gray-300 rounded-lg p-3 text-sm" oninput="setField('${f.key}', this.value)"`;
+  if (f.type === 'textarea') return `<div><label class="text-xs text-gray-600">${f.label}</label><textarea ${common} rows="2">${esc(value||'')}</textarea></div>`;
+  if (f.type === 'select') return `<div><label class="text-xs text-gray-600">${f.label}</label><select ${common}>${f.options.map(o => `<option value="${esc(o)}" ${value===o?'selected':''}>${o||'-- select --'}</option>`).join('')}</select></div>`;
+  return `<div><label class="text-xs text-gray-600">${f.label}</label><input type="${f.type||'text'}" value="${esc(value||'')}" ${common} /></div>`;
+}
+
+function setField(key, val) { state.current.fields[key] = val; }
+
+async function handleUpload(event) {
+  const files = Array.from(event.target.files || []); if (!files.length) return;
+  state.busy = true; state.busyMsg = 'OCR starting...'; render(); let allText = '';
+  for (let i = 0; i < files.length; i++) {
+    state.busyMsg = `Scanning ${i+1}/${files.length}... 0%`; render();
+    try {
+      const txt = await runOCR(files[i], (p) => { state.busyMsg = `Scanning ${i+1}/${files.length}... ${Math.round(p*100)}%`; const el = document.querySelector('.spinner')?.parentElement; if (el) el.lastChild.textContent = state.busyMsg; });
+      allText += '\n' + txt;
+    } catch(e) { console.error(e); }
+  }
+  const extracted = extractFromText(allText); Object.assign(state.current.fields, extracted);
+  state.busy = false; render(); toast(`✓ ${Object.keys(extracted).length} fields auto-filled. Verify kariye.`);
+}
+
+function nextToPhotos() {
+  if (!state.current.fields.vehicle_no && !state.current.fields.policy_no) { if (!confirm('Vehicle number / policy number khali hai. Phir bhi aage badhein?')) return; }
+  state.wizardStep = 3; render();
+}
+
+function wizardStep3() {
+  const c = state.current; const required = SHOT_CONFIG[c.vehicleType] || SHOT_CONFIG.car;
+  const done = required.filter(id => c.photos.find(p => p.shotType === id)).length;
+  return `<div class="mb-3"><div class="flex items-center justify-between text-sm mb-1"><span class="font-semibold">Photos: ${done} / ${required.length}</span><span class="text-xs text-gray-500">GPS + timestamp auto-burn hoga</span></div>
+      <div class="h-2 bg-gray-200 rounded-full overflow-hidden"><div class="h-full bg-[#1E3A8A] transition-all" style="width:${(done/required.length)*100}%"></div></div></div>
+    <div class="space-y-3">${required.map((shotId) => {
+        const shot = SHOT_LABELS[shotId]; const existing = c.photos.find(p => p.shotType === shotId);
+        return `<div class="card p-3 ${existing?'ring-2 ring-green-400':''}"><div class="flex items-start gap-3">
+              <div class="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">${existing ? `<img src="${existing.dataUrl}" class="w-full h-full object-cover"/>` : '<span class="text-2xl">📷</span>'}</div>
+              <div class="flex-1 min-w-0"><p class="font-semibold text-sm flex items-center gap-1">${existing ? '✓' : ''} ${shot.label}</p><p class="text-xs text-gray-500 mt-1 leading-snug">${shot.hint}</p>
+                <label class="inline-block mt-2 bg-[#1E3A8A] text-white text-xs px-3 py-2 rounded-lg cursor-pointer">${existing ? 'Retake' : 'Take Photo'}<input type="file" accept="image/*" capture="environment" class="hidden" onchange="capturePhoto(event, '${shotId}')"/></label></div></div></div>`;
+      }).join('')}</div>
+    <button onclick="if(${done}<${required.length}){if(!confirm('Kuch photos pending hain. Phir bhi aage badhein?'))return;}state.wizardStep=4;render();" class="w-full bg-[#F59E0B] text-white p-4 rounded-xl font-semibold mt-4">${done===required.length ? 'Next: Review →' : `Skip (${required.length-done} pending) →`}</button>`;
+}
+
+async function capturePhoto(event, shotId) {
+  const file = event.target.files?.[0]; if (!file) return;
+  state.busy = true; state.busyMsg = 'GPS fetch + watermark...'; render();
+  try {
+    const gps = await getGPS(); const shot = SHOT_LABELS[shotId]; const dataUrl = await processImage(file, gps, shot.label); const c = state.current;
+    c.photos = c.photos.filter(p => p.shotType !== shotId);
+    c.photos.push({ shotType: shotId, dataUrl, gps: gps, capturedAt: new Date().toISOString() });
+    state.busy = false; render(); toast(gps ? '✓ Photo saved with GPS' : '✓ Photo saved (GPS unavailable)');
+  } catch (e) { state.busy = false; render(); alert('Photo processing failed: ' + e.message); }
+}
+
+function wizardStep4() {
+  const c = state.current; const required = SHOT_CONFIG[c.vehicleType] || SHOT_CONFIG.car;
+  const photosDone = required.filter(id => c.photos.find(p => p.shotType === id)).length;
+  return `<div class="card p-4 mb-3"><p class="text-xs text-gray-500">Vehicle</p><p class="font-semibold">${esc(c.fields.vehicle_no || 'Not set')} · ${VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.label || ''}</p><p class="text-xs text-gray-500 mt-1">Policy: ${esc(c.fields.policy_no || 'Not set')}</p><p class="text-xs text-gray-500 mt-1">Photos: ${photosDone}/${required.length}</p><p class="text-xs text-gray-500 mt-1">Insured: ${esc(c.fields.insured_name || 'Not set')}</p></div>
+    <div class="space-y-3"><button onclick="generateClaimPDF()" class="w-full bg-[#1E3A8A] text-white p-4 rounded-xl font-semibold text-left">📄 Download Claim Form PDF<p class="text-xs opacity-80 font-normal">Ready to print & submit to insurer</p></button>
+      <button onclick="generatePhotoPDF()" class="w-full bg-[#1E3A8A] text-white p-4 rounded-xl font-semibold text-left">📸 Download Photo Report PDF<p class="text-xs opacity-80 font-normal">${c.photos.length} photos with GPS + timestamp</p></button>
+      <button onclick="saveAndFinish()" class="w-full bg-[#F59E0B] text-white p-4 rounded-xl font-semibold">💾 Save Claim & Go Home</button></div>
+    <p class="text-xs text-gray-500 text-center mt-6">Dono PDFs download karke insurer ko print/email kar dein.</p>`;
+}
+
+async function saveAndFinish() {
+  const c = state.current; const idx = state.claims.findIndex(x => x.id === c.id);
+  if (idx >= 0) state.claims[idx] = c; else state.claims.push(c);
+  await saveClaims(); toast('✓ Claim saved locally'); setTimeout(() => { state.current = null; setView('home'); }, 600);
+}
+
+async function generateClaimPDF() {
+  const c = state.current; const grouped = {}; FORM_FIELDS.forEach(f => { (grouped[f.section] = grouped[f.section] || []).push(f); });
+  const rows = (fields) => fields.map(f => `<tr><td class="lbl">${esc(f.label)}</td><td>${esc(c.fields[f.key] || '-')}</td></tr>`).join('');
+  const html = `<div class="pdf-page"><div style="text-align:center;border-bottom:2px solid #1E3A8A;padding-bottom:8px;margin-bottom:10px;"><h1 style="color:#1E3A8A;">MOTOR INSURANCE CLAIM FORM</h1><p style="font-size:10px;color:#666;margin:0;">Generated by ClaimMitra · ${new Date().toLocaleDateString('en-IN')}</p></div>
+      ${Object.entries(grouped).map(([section, fields]) => `<h2>${esc(section)}</h2><table>${rows(fields)}</table>`).join('')}
+      <h2>Declaration</h2><p style="font-size:9px;line-height:1.4;margin:4px 0;">I/We hereby declare that the information given above is true and correct to the best of my/our knowledge and belief. I/We further declare that the loss/damage was not caused by any willful act or negligence on my/our part.</p>
+      <table style="margin-top:20mm;"><tr><td style="border:none;width:50%;padding-top:15mm;">____________________<br/>Signature of Insured</td><td style="border:none;width:50%;padding-top:15mm;">____________________<br/>Date &amp; Place</td></tr></table>
+      <p style="font-size:8px;color:#999;text-align:center;margin-top:15mm;">Generated by ClaimMitra — Verify all details before submission</p></div>`;
+  await renderPDFToDownload(html, `ClaimForm_${c.fields.vehicle_no || 'claim'}.pdf`);
+}
+
+async function generatePhotoPDF() {
+  const c = state.current;
+  const photosHtml = c.photos.map(p => `<div class="photo-card"><img src="${p.dataUrl}" alt="${esc(p.shotType)}"/><div class="meta"><strong>${esc(SHOT_LABELS[p.shotType]?.label || p.shotType)}</strong><br/>Captured: ${esc(new Date(p.capturedAt).toLocaleString('en-IN'))}<br/>GPS: ${p.gps ? `${p.gps.lat.toFixed(6)}, ${p.gps.lng.toFixed(6)}` : 'Not available'}</div></div>`).join('');
+  const html = `<div class="pdf-page"><div style="text-align:center;padding:20mm 0;border-bottom:2px solid #1E3A8A;"><h1 style="color:#1E3A8A;font-size:24px;">VEHICLE INSPECTION REPORT</h1><p style="margin-top:5mm;font-size:11px;">Generated by ClaimMitra</p></div>
+      <h2>Claim Summary</h2><table><tr><td class="lbl">Vehicle Number</td><td>${esc(c.fields.vehicle_no || '-')}</td></tr><tr><td class="lbl">Policy Number</td><td>${esc(c.fields.policy_no || '-')}</td></tr><tr><td class="lbl">Vehicle Type</td><td>${esc(VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.label || '-')}</td></tr><tr><td class="lbl">Insured Name</td><td>${esc(c.fields.insured_name || '-')}</td></tr><tr><td class="lbl">Inspection Date</td><td>${new Date().toLocaleDateString('en-IN')}</td></tr><tr><td class="lbl">Photos Attached</td><td>${c.photos.length}</td></tr></table>
+      <div style="page-break-before:always;"></div><h2>Photographic Evidence</h2>${photosHtml || '<p style="font-size:11px;color:#666;">No photos captured.</p>'}</div>`;
+  await renderPDFToDownload(html, `PhotoReport_${c.fields.vehicle_no || 'claim'}.pdf`);
+}
+
+async function renderPDFToDownload(html, filename) {
+  const holder = document.getElementById('pdf-holder'); holder.innerHTML = html; const el = holder.querySelector('.pdf-page');
+  try {
+    await html2pdf().set({ margin: 0, filename: filename, image: { type: 'jpeg', quality: 0.92 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(el).save();
+    toast('✓ PDF downloaded');
+  } catch (e) { alert('PDF error: ' + e.message); } finally { holder.innerHTML = ''; }
+}
+
+function renderInsurers() {
+  return `<div class="max-w-md mx-auto min-h-screen bg-white pb-8"><header class="bg-[#1E3A8A] text-white p-4 flex items-center gap-3"><button onclick="setView('home')" class="text-2xl leading-none">‹</button><div><p class="font-semibold">Insurer Helplines</p><p class="text-xs opacity-80">Claim intimation ke liye call kariye</p></div></header>
+    <main class="p-4 space-y-2"><p class="text-xs text-gray-500 mb-2">Numbers verify kar lijiye company website par — yeh general info hai.</p>
+      ${INSURERS.map(i => `<div class="card p-3"><p class="font-semibold text-sm">${esc(i.name)}</p><div class="flex gap-2 mt-2 text-xs"><a href="tel:${esc(i.tollfree.replace(/\s/g,''))}" class="bg-[#1E3A8A] text-white px-3 py-2 rounded-lg">📞 ${esc(i.tollfree)}</a><a href="mailto:${esc(i.email)}" class="bg-gray-100 text-gray-800 px-3 py-2 rounded-lg">✉ Email</a></div></div>`).join('')}
+      <p class="text-xs text-gray-500 mt-4 leading-relaxed"><strong>Tip:</strong> Toll-free par call karke "motor claim intimation" bolein, claim reference number note kariye, aur email par bhi likhit intimation bhej dein.</p></main></div>`;
+}
+
+function renderSettings() {
+  return `<div class="max-w-md mx-auto min-h-screen bg-white pb-8"><header class="bg-[#1E3A8A] text-white p-4 flex items-center gap-3"><button onclick="setView('home')" class="text-2xl leading-none">‹</button><p class="font-semibold">Settings</p></header>
+    <main class="p-4 space-y-3"><div class="card p-4"><p class="font-semibold text-sm">About</p><p class="text-xs text-gray-600 mt-1">ClaimMitra — frontend-only motor claim assistant. Sab data aapke device par (IndexedDB) locally save hota hai. Koi server nahi.</p></div>
+      <div class="card p-4"><p class="font-semibold text-sm">Privacy</p><p class="text-xs text-gray-600 mt-1">Documents, photos aur PDFs — sab kuch browser mein hi process hote hain. Kuch bhi upload nahi hota.</p></div>
+      <button onclick="if(confirm('Saare local claims delete karein? Yeh undo nahi hoga.')){idbKeyval.del('claims').then(()=>{state.claims=[];toast('✓ Cleared');render();});}" class="w-full bg-red-50 text-red-700 p-4 rounded-xl font-semibold text-sm">🗑 Clear All Local Data</button></main></div>`;
+}
+
+function loadDemo() {
+  const demo = { id: uid(), vehicleType: 'car', fields: { policy_no: 'MOT/2024/1234567', vehicle_no: 'MH12AB1234', engine_no: 'ENG12345678', chassis_no: 'MA3ABC12345678901', insured_name: 'Rajesh Kumar Sharma', mobile: '9876543210', email: 'rajesh@example.com', accident_date: '2025-01-15', accident_time: '14:30', place_of_loss: 'Mumbai-Pune Highway, Near Khopoli Toll', type_of_loss: 'Damage', estimated_repair_cost: '35000', description: 'Rear bumper damaged in minor collision at toll plaza', driver_name: 'Rajesh Kumar Sharma', driver_license_no: 'MH1220180012345', police_report_lodged: 'No' }, photos: [], stages: STAGE_NAMES.map(n => ({ name: n, status: 'pending', notes: '', updatedAt: null })), createdAt: new Date().toISOString() };
+  state.current = demo; state.wizardStep = 4; setView('wizard'); toast('Demo loaded — try PDF buttons');
+}
+
+(async function init() { await loadClaims(); render(); })();
+</script>
+</body>
+</html>
