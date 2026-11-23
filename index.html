@@ -8,6 +8,8 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/idb-keyval@6/dist/umd.js"></script>
+<!-- PDF.js for reading PDF files -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   body { font-family: Inter, system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -16,22 +18,17 @@
   .spinner { border: 2px solid #e5e7eb; border-top-color: #1E3A8A; border-radius: 50%; width: 18px; height: 18px; animation: spin 0.8s linear infinite; display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
   
-  /* PDF Styling for United India Form */
+  /* --- PDF Styling (A4 Format) --- */
   .pdf-page { width: 210mm; min-height: 297mm; padding: 10mm 15mm; background: white; color: #000; font-family: Arial, sans-serif; font-size: 10px; }
   .pdf-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 10px; }
   .pdf-header h1 { font-size: 16px; font-weight: bold; margin: 0; text-transform: uppercase; }
   .pdf-header p { margin: 2px 0; font-size: 10px; }
-  .form-title { background: #e5e7eb; text-align: center; font-weight: bold; padding: 4px; margin-bottom: 10px; border: 1px solid #000; font-size: 12px; }
-  .form-instructions { font-size: 9px; margin-bottom: 10px; border: 1px solid #000; padding: 5px; }
+  .form-title { background: #e5e7eb; text-align: center; font-weight: bold; padding: 4px; margin-bottom: 10px; border: 1px solid #000; font-size: 12px; text-transform: uppercase; }
   
   .form-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
   .form-table td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
   .lbl { background: #f3f4f6; font-weight: bold; font-size: 9px; width: 30%; }
-  .filled { color: #1E3A8A; font-weight: 900; font-size: 11px; } /* Dark Blue Bold */
-  
-  .photo-card { page-break-inside: avoid; margin-bottom: 10mm; border: 1px solid #ccc; padding: 5mm; }
-  .photo-card img { max-width: 100%; max-height: 100mm; display: block; margin: 0 auto; }
-  .photo-card .meta { font-size: 10px; margin-top: 2mm; }
+  .filled { color: #1E3A8A; font-weight: 900; font-size: 11px; } /* Default Blue */
 </style>
 </head>
 <body class="bg-gray-50">
@@ -39,12 +36,34 @@
 <div id="pdf-holder" style="position:fixed;left:-9999px;top:0;"></div>
 
 <script>
-const VEHICLE_TYPES = [
-  { id: 'car', label: 'Car', emoji: '🚗' }, { id: 'pickup', label: 'Pickup', emoji: '🛻' },
-  { id: 'truck', label: 'Truck', emoji: '🚚' }, { id: 'bus', label: 'Passenger Bus', emoji: '🚌' },
-  { id: 'schoolbus', label: 'School Bus', emoji: '🚌' }, { id: 'tipper', label: 'Tipper', emoji: '🚛' },
-  { id: 'tractor', label: 'Tractor', emoji: '🚜' },
+// Set PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const INSURERS = [
+  { name: 'United India Insurance', color: '#1E3A8A', bg: '#e0e7ff' }, // Dark Blue
+  { name: 'ICICI Lombard',          color: '#b91c1c', bg: '#fee2e2' }, // Red
+  { name: 'HDFC ERGO',              color: '#dc2626', bg: '#fef2f2' }, // HDFC Red
+  { name: 'Bajaj Allianz',          color: '#0284c7', bg: '#e0f2fe' }, // Light Blue
+  { name: 'TATA AIG',               color: '#1e293b', bg: '#f1f5f9' }, // Dark Grey
+  { name: 'New India Assurance',    color: '#1E3A8A', bg: '#e0e7ff' },
+  { name: 'Oriental Insurance',     color: '#047857', bg: '#d1fae5' }, // Green
+  { name: 'National Insurance',     color: '#4338ca', bg: '#e0e7ff' }, // Indigo
+  { name: 'Acko General',           color: '#0f172a', bg: '#f8fafc' }, // Black/Grey
+  { name: 'Go Digit',               color: '#f59e0b', bg: '#fef3c7' }, // Yellow/Orange
+  { name: 'Reliance General',       color: '#b91c1c', bg: '#fee2e2' },
+  { name: 'SBI General',            color: '#1e40af', bg: '#dbeafe' }  // SBI Blue
 ];
+
+const VEHICLE_TYPES = [
+  { id: 'car', label: 'Private Car', emoji: '🚗', isCommercial: false }, 
+  { id: 'pickup', label: 'Pickup', emoji: '🛻', isCommercial: true },
+  { id: 'truck', label: 'Truck', emoji: '🚚', isCommercial: true }, 
+  { id: 'bus', label: 'Passenger Bus', emoji: '🚌', isCommercial: true },
+  { id: 'schoolbus', label: 'School Bus', emoji: '🚌', isCommercial: true }, 
+  { id: 'tipper', label: 'Tipper', emoji: '🚛', isCommercial: true },
+  { id: 'tractor', label: 'Tractor', emoji: '🚜', isCommercial: true },
+];
+
 const SHOT_CONFIG = {
   car: ['front','rear','left','right','chassis','odometer','damage'],
   pickup: ['front','rear','left','right','chassis','odometer','damage','permit'],
@@ -54,6 +73,7 @@ const SHOT_CONFIG = {
   tipper: ['front','rear','left','right','chassis','odometer','damage','permit'],
   tractor: ['front','rear','left','right','chassis','hourmeter','damage'],
 };
+
 const SHOT_LABELS = {
   front:    { label: 'Front View',      hint: 'Stand 2.5-3m away. Poora vehicle + number plate dikhna chahiye.' },
   rear:     { label: 'Rear View',       hint: 'Rear side ka poora view. Number plate clear ho.' },
@@ -65,20 +85,7 @@ const SHOT_LABELS = {
   damage:   { label: 'Damage Close-Up', hint: 'Damaged area ka close-up. Number plate bhi frame mein ho to better.' },
   permit:   { label: 'Permit / Fitness',hint: 'Permit / fitness certificate ki clear photo.' },
 };
-const INSURERS = [
-  { name: 'ICICI Lombard', tollfree: '1800 2666', email: 'customersupport@icicilombard.com' },
-  { name: 'HDFC ERGO', tollfree: '1800 2666 440', email: 'care@hdfcergo.com' },
-  { name: 'Bajaj Allianz', tollfree: '1800 209 5858', email: 'customercare@bajajallianz.co.in' },
-  { name: 'TATA AIG', tollfree: '1800 266 7780', email: 'customersupport@tataaig.com' },
-  { name: 'New India Assurance', tollfree: '1800 209 1415', email: 'info@newindia.co.in' },
-  { name: 'Oriental Insurance', tollfree: '1800 11 8485', email: 'oriental@orientalinsurance.org.in' },
-  { name: 'National Insurance', tollfree: '1800 345 0330', email: 'info@nic.co.in' },
-  { name: 'United India', tollfree: '1800 425 33333', email: 'info@uiic.co.in' },
-  { name: 'Acko General', tollfree: '1800 266 2256', email: 'help@acko.com' },
-  { name: 'Go Digit', tollfree: '1800 258 5959', email: 'hello@godigit.com' },
-  { name: 'Reliance General', tollfree: '1800 300 9000', email: 'care@reliancegeneral.co.in' },
-  { name: 'SBI General', tollfree: '1800 102 1111', email: 'customer.care@sbigeneral.in' },
-];
+
 const FORM_FIELDS = [
   { key:'policy_no', label:'Policy Number', section:'Policy Details' }, { key:'vehicle_no', label:'Registration Number', section:'Vehicle Details' },
   { key:'engine_no', label:'Engine Number', section:'Vehicle Details' }, { key:'chassis_no', label:'Chassis Number', section:'Vehicle Details' },
@@ -94,7 +101,7 @@ const FORM_FIELDS = [
   { key:'fir_no', label:'FIR / Crime Diary No', section:'Police Report' },
 ];
 
-let state = { view: 'home', claims: [], current: null, wizardStep: 1, busy: false, busyMsg: '' };
+let state = { view: 'home', claims: [], current: null, wizardStep: 1, busy: false, busyMsg: '', docStatus: {} };
 
 async function loadClaims() { try { state.claims = (await idbKeyval.get('claims')) || []; } catch { state.claims = []; } }
 async function saveClaims() { await idbKeyval.set('claims', state.claims); }
@@ -146,9 +153,31 @@ function getGPS() {
   });
 }
 
+// OCR Function that supports both Images and PDFs
 async function runOCR(file, onProgress) {
-  const { data } = await Tesseract.recognize(file, 'eng', { logger: (m) => { if (m.status === 'recognizing text') onProgress?.(m.progress); } });
-  return data.text;
+  let text = '';
+  if (file.type === 'application/pdf') {
+    // Process PDF
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      await page.render({ canvasContext: context, viewport: viewport }).promise;
+      
+      const { data } = await Tesseract.recognize(canvas, 'eng', { logger: (m) => { if (m.status === 'recognizing text') onProgress?.(m.progress); } });
+      text += data.text + '\n';
+    }
+  } else {
+    // Process Image
+    const { data } = await Tesseract.recognize(file, 'eng', { logger: (m) => { if (m.status === 'recognizing text') onProgress?.(m.progress); } });
+    text = data.text;
+  }
+  return text;
 }
 
 function extractFromText(text) {
@@ -169,7 +198,8 @@ function extractFromText(text) {
 
 function setView(v, opts={}) { state.view = v; Object.assign(state, opts); render(); window.scrollTo(0, 0); }
 function startNewClaim() {
-  state.current = { id: uid(), vehicleType: '', fields: {}, photos: [], createdAt: new Date().toISOString() };
+  state.current = { id: uid(), insurer: INSURERS[0].name, vehicleType: '', fields: {}, photos: [], createdAt: new Date().toISOString() };
+  state.docStatus = {};
   state.wizardStep = 1; setView('wizard');
 }
 function openClaim(id) { state.current = state.claims.find(c => c.id === id); if (state.current) { state.wizardStep = 2; setView('wizard'); } }
@@ -212,7 +242,7 @@ function renderHome() {
 function renderWizard() {
   const c = state.current; if (!c) return '<p class="p-4">No claim</p>'; let body = '';
   if (state.wizardStep === 1) body = wizardStep1(); else if (state.wizardStep === 2) body = wizardStep2(); else if (state.wizardStep === 3) body = wizardStep3(); else body = wizardStep4();
-  const titles = ['Select Vehicle Type', 'Documents & Form', 'Vehicle Photos', 'Review & PDF'];
+  const titles = ['Select Insurer & Vehicle', 'Documents & Details', 'Vehicle Photos', 'Review & PDF'];
   return `<div class="max-w-md mx-auto min-h-screen bg-white pb-24">
     <header class="bg-[#1E3A8A] text-white p-4 sticky top-0 z-10"><div class="flex items-center gap-3">
       <button onclick="if(state.wizardStep>1){state.wizardStep--;render();}else{setView('home')}" class="text-2xl leading-none">‹</button>
@@ -223,18 +253,47 @@ function renderWizard() {
 
 function wizardStep1() {
   const c = state.current;
-  return `<p class="text-sm text-gray-600 mb-4">Kaunsi gaadi ka claim hai? Photo checklist iske hisaab se adjust hoga.</p>
+  return `<p class="text-sm text-gray-600 mb-2 font-semibold">1. Insurance Company Chuniye</p>
+    <select onchange="setInsurer(this.value)" class="w-full border border-gray-300 rounded-lg p-3 text-sm mb-6 bg-white">
+      ${INSURERS.map(ins => `<option value="${ins.name}" ${c.insurer === ins.name ? 'selected' : ''}>${ins.name}</option>`).join('')}
+    </select>
+    
+    <p class="text-sm text-gray-600 mb-2 font-semibold">2. Vehicle Type Chuniye</p>
     <div class="grid grid-cols-2 gap-3">${VEHICLE_TYPES.map(v => `<button onclick="pickVehicle('${v.id}')" class="card p-4 text-center ${c.vehicleType===v.id?'ring-2 ring-[#1E3A8A] bg-blue-50':''}"><p class="text-3xl">${v.emoji}</p><p class="text-sm font-semibold mt-2">${v.label}</p></button>`).join('')}</div>`;
 }
+function setInsurer(val) { state.current.insurer = val; }
 function pickVehicle(id) { state.current.vehicleType = id; state.wizardStep = 2; render(); }
 
 function wizardStep2() {
   const c = state.current; const grouped = {}; FORM_FIELDS.forEach(f => { (grouped[f.section] = grouped[f.section] || []).push(f); });
-  return `<div class="card p-4 mb-4"><p class="text-sm text-gray-700 mb-2">Option A: Documents upload kariye — OCR chalega (30-60 sec per doc)</p>
-      <input type="file" multiple accept="image/*,application/pdf" onchange="handleUpload(event)" class="text-sm w-full border rounded p-2"/>
-      <p class="text-xs text-gray-500 mt-2">Policy copy, RC, DL, FIR, estimate — sab ek saath upload kariye.</p>
-      ${state.busy ? `<div class="mt-3 flex items-center gap-2 text-sm text-[#1E3A8A]"><span class="spinner"></span>${esc(state.busyMsg)}</div>` : ''}</div>
-    <p class="text-xs text-gray-500 text-center mb-3">— ya —</p><p class="text-sm text-gray-700 mb-3">Option B: Neeche form manually bhariye (faster)</p>
+  
+  // Document Upload Status UI
+  const docList = [
+    { id: 'policy', label: 'Insurance Policy' },
+    { id: 'rc', label: 'RC (Registration)' },
+    { id: 'dl', label: 'Driving License' },
+    { id: 'aadhaar', label: 'Aadhaar / PAN' }
+  ];
+  const docStatusHtml = docList.map(doc => `
+    <div class="flex items-center gap-2 mb-1 text-xs">
+      <span class="w-5 h-5 flex items-center justify-center rounded-full ${state.docStatus[doc.id] ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}">
+        ${state.docStatus[doc.id] ? '✓' : '○'}
+      </span>
+      <span class="${state.docStatus[doc.id] ? 'text-gray-800 font-medium' : 'text-gray-500'}">${doc.label}</span>
+    </div>
+  `).join('');
+
+  return `<div class="card p-4 mb-4">
+      <p class="text-sm text-gray-700 mb-2 font-semibold">Option A: Documents upload kariye</p>
+      <div class="mb-3 p-2 bg-gray-50 rounded border">
+        ${docStatusHtml}
+      </div>
+      <input type="file" multiple accept="image/*,application/pdf" onchange="handleUpload(event)" class="text-sm w-full border rounded p-2 bg-white"/>
+      <p class="text-[10px] text-gray-500 mt-2">Aap ek saath multiple files select kar sakte hain. (PDF aur Images dono chalenge)</p>
+      ${state.busy ? `<div class="mt-3 flex items-center gap-2 text-sm text-[#1E3A8A]"><span class="spinner"></span>${esc(state.busyMsg)}</div>` : ''}
+    </div>
+    <p class="text-xs text-gray-500 text-center mb-3">— ya —</p>
+    <p class="text-sm text-gray-700 mb-3 font-semibold">Option B: Manually details verify/bhariye</p>
     ${Object.entries(grouped).map(([section, fields]) => `<div class="mb-4"><p class="text-xs font-bold text-[#1E3A8A] uppercase mb-2">${section}</p><div class="space-y-2">${fields.map(f => renderField(f, c.fields[f.key])).join('')}</div></div>`).join('')}
     <button onclick="nextToPhotos()" class="w-full bg-[#F59E0B] text-white p-4 rounded-xl font-semibold mt-4">Next: Capture Photos →</button>`;
 }
@@ -251,15 +310,28 @@ function setField(key, val) { state.current.fields[key] = val; }
 async function handleUpload(event) {
   const files = Array.from(event.target.files || []); if (!files.length) return;
   state.busy = true; state.busyMsg = 'OCR starting...'; render(); let allText = '';
+  
   for (let i = 0; i < files.length; i++) {
+    const fileName = files[i].name.toLowerCase();
+    
+    // Guess doc type from filename
+    if (fileName.includes('policy')) state.docStatus.policy = true;
+    else if (fileName.includes('rc')) state.docStatus.rc = true;
+    else if (fileName.includes('dl') || fileName.includes('license')) state.docStatus.dl = true;
+    else if (fileName.includes('aadhaar') || fileName.includes('pan')) state.docStatus.aadhaar = true;
+    else state.docStatus.other = true;
+    
     state.busyMsg = `Scanning ${i+1}/${files.length}... 0%`; render();
     try {
       const txt = await runOCR(files[i], (p) => { state.busyMsg = `Scanning ${i+1}/${files.length}... ${Math.round(p*100)}%`; const el = document.querySelector('.spinner')?.parentElement; if (el) el.lastChild.textContent = state.busyMsg; });
       allText += '\n' + txt;
     } catch(e) { console.error(e); }
   }
-  const extracted = extractFromText(allText); Object.assign(state.current.fields, extracted);
-  state.busy = false; render(); toast(`✓ ${Object.keys(extracted).length} fields auto-filled. Verify kariye.`);
+  
+  const extracted = extractFromText(allText); 
+  Object.assign(state.current.fields, extracted);
+  state.busy = false; render(); 
+  toast(`✓ ${Object.keys(extracted).length} fields auto-filled. Niche verify kariye.`);
 }
 
 function nextToPhotos() {
@@ -296,11 +368,18 @@ async function capturePhoto(event, shotId) {
 function wizardStep4() {
   const c = state.current; const required = SHOT_CONFIG[c.vehicleType] || SHOT_CONFIG.car;
   const photosDone = required.filter(id => c.photos.find(p => p.shotType === id)).length;
-  return `<div class="card p-4 mb-3"><p class="text-xs text-gray-500">Vehicle</p><p class="font-semibold">${esc(c.fields.vehicle_no || 'Not set')} · ${VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.label || ''}</p><p class="text-xs text-gray-500 mt-1">Policy: ${esc(c.fields.policy_no || 'Not set')}</p><p class="text-xs text-gray-500 mt-1">Photos: ${photosDone}/${required.length}</p><p class="text-xs text-gray-500 mt-1">Insured: ${esc(c.fields.insured_name || 'Not set')}</p></div>
-    <div class="space-y-3"><button onclick="generateClaimPDF()" class="w-full bg-[#1E3A8A] text-white p-4 rounded-xl font-semibold text-left">📄 Download Claim Form PDF<p class="text-xs opacity-80 font-normal">United India Format (Auto-filled)</p></button>
+  return `<div class="card p-4 mb-3">
+      <p class="text-xs text-gray-500 font-semibold mb-1">Insurer: <span class="text-[#1E3A8A]">${esc(c.insurer)}</span></p>
+      <p class="font-semibold">${esc(c.fields.vehicle_no || 'Not set')} · ${VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.label || ''}</p>
+      <p class="text-xs text-gray-500 mt-1">Policy: ${esc(c.fields.policy_no || 'Not set')}</p>
+      <p class="text-xs text-gray-500 mt-1">Photos: ${photosDone}/${required.length}</p>
+      <p class="text-xs text-gray-500 mt-1">Insured: ${esc(c.fields.insured_name || 'Not set')}</p>
+    </div>
+    <div class="space-y-3">
+      <button onclick="generateClaimPDF()" class="w-full bg-[#1E3A8A] text-white p-4 rounded-xl font-semibold text-left">📄 Download Claim Form PDF<p class="text-xs opacity-80 font-normal">${esc(c.insurer)} Format (Auto-filled)</p></button>
       <button onclick="generatePhotoPDF()" class="w-full bg-[#1E3A8A] text-white p-4 rounded-xl font-semibold text-left">📸 Download Photo Report PDF<p class="text-xs opacity-80 font-normal">${c.photos.length} photos with GPS + timestamp</p></button>
-      <button onclick="saveAndFinish()" class="w-full bg-[#F59E0B] text-white p-4 rounded-xl font-semibold">💾 Save Claim & Go Home</button></div>
-    <p class="text-xs text-gray-500 text-center mt-6">Dono PDFs download karke insurer ko print/email kar dein.</p>`;
+      <button onclick="saveAndFinish()" class="w-full bg-[#F59E0B] text-white p-4 rounded-xl font-semibold">💾 Save Claim & Go Home</button>
+    </div>`;
 }
 
 async function saveAndFinish() {
@@ -309,30 +388,30 @@ async function saveAndFinish() {
   await saveClaims(); toast('✓ Claim saved locally'); setTimeout(() => { state.current = null; setView('home'); }, 600);
 }
 
-// --- Actual United India PDF Generation ---
+// --- Dynamic Company & Vehicle PDF Generation ---
 async function generateClaimPDF() {
   const c = state.current; const f = c.fields;
+  const isComm = VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.isCommercial;
+  const insurerObj = INSURERS.find(i => i.name === c.insurer) || INSURERS[0]; 
   
-  // Helper to colorize data in dark blue bold
-  const d = (val) => val ? `<span class="filled">${esc(val)}</span>` : '';
+  // Helper to format data with Company Color
+  const d = (val) => val ? `<span style="color: ${insurerObj.color}; font-weight: 900; font-size: 11px;">${esc(val)}</span>` : '';
 
-  const html = `
-    <div class="pdf-page">
-      <!-- Header -->
-      <div class="pdf-header">
-        <h1>UNITED INDIA INSURANCE COMPANY LIMITED</h1>
-        <p>Registered & Head Office, 24 - Whites Road, Chennai - 600 014.</p>
+  let formHTML = '';
+
+  if (isComm) {
+    // === COMMERCIAL VEHICLE FORM ===
+    formHTML = `
+      <div class="pdf-header" style="border-bottom-color: ${insurerObj.color};">
+        <h1 style="color: ${insurerObj.color};">${esc(c.insurer).toUpperCase()}</h1>
+        <p>Registered & Head Office, Chennai.</p>
       </div>
-      
-      <div class="form-title">MOTOR CLAIM FORM - COMMERCIAL VEHICLE</div>
-      
-      <div class="form-instructions">
+      <div class="form-title" style="background-color: ${insurerObj.bg}; color: ${insurerObj.color}; border-color: ${insurerObj.color};">MOTOR CLAIM FORM - COMMERCIAL VEHICLE</div>
+      <div style="font-size: 9px; margin-bottom:10px; border:1px solid #000; padding:5px;">
         <b>THE ISSUE OF THIS FORM IS NOT TO BE TAKEN AS AN ADMISSION OF LIABILITY</b><br>
-        <b>INSTRUCTIONS FOR FILLING THE FORM</b><br>
-        (a) Complete the form fully without leaving any relevant information. (b) Where check boxes provided tick the appropriate relevant box. (c) Where multiple boxes, fill one letter per box.
+        <b>INSTRUCTIONS:</b> Complete the form fully without leaving any relevant information.
       </div>
 
-      <!-- Table 1 -->
       <table class="form-table">
         <tr>
           <td class="lbl">CLAIM NUMBER (Office Use)</td><td></td>
@@ -351,13 +430,10 @@ async function generateClaimPDF() {
         </tr>
       </table>
 
-      <!-- Table 2 -->
       <table class="form-table">
         <tr>
           <td class="lbl">VEHICLE TYPE</td>
-          <td colspan="3">
-            Goods Vehicle [ ] &nbsp; Passenger Vehicle [ ] &nbsp; Miscellaneous type of Vehicle [ ] &nbsp; <b>${d(VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.label)}</b>
-          </td>
+          <td colspan="3">Goods Vehicle [ ] &nbsp; Passenger Vehicle [ ] &nbsp; <b>${d(VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.label)}</b></td>
         </tr>
         <tr>
           <td class="lbl">Registration Number</td><td>${d(f.vehicle_no)}</td>
@@ -373,55 +449,43 @@ async function generateClaimPDF() {
         </tr>
       </table>
 
-      <!-- Table 3 -->
       <table class="form-table">
         <tr>
           <td class="lbl">CLAIM TYPE</td>
-          <td colspan="3">
-            Accident [ ] &nbsp; Theft [ ] &nbsp; Others (Specify) [ ] &nbsp; <b>${d(f.type_of_loss)}</b>
-          </td>
+          <td colspan="3">Accident [ ] &nbsp; Theft [ ] &nbsp; Others [ ] &nbsp; <b>${d(f.type_of_loss)}</b></td>
         </tr>
         <tr>
           <td class="lbl">Date of loss</td><td>${d(f.accident_date)}</td>
           <td class="lbl">Place of Accident / Theft</td><td>${d(f.place_of_loss)}</td>
         </tr>
         <tr>
-          <td class="lbl">Provide brief description of accident / theft / occurrence.</td>
+          <td class="lbl">Provide brief description of accident / theft.</td>
           <td colspan="3" style="height: 40px;">${d(f.description)}</td>
-        </tr>
-        <tr>
-          <td class="lbl">Draw a rough sketch of the accident location.</td>
-          <td colspan="3" style="height: 60px;"></td>
         </tr>
       </table>
 
-      <!-- Table 4 -->
       <table class="form-table">
         <tr>
           <td class="lbl" rowspan="2">LOSS DESCRIPTION<br>Person driving was</td>
           <td colspan="3">Owner [ ] &nbsp; Friend / Relative [ ] &nbsp; Paid Driver [ ] &nbsp; If driver, years of service: ____</td>
         </tr>
         <tr>
-          <td colspan="3">
-            Driver Name: ${d(f.driver_name)}<br>
-            Driving Licence Number: ${d(f.driver_license_no)}
-          </td>
+          <td colspan="3">Driver Name: ${d(f.driver_name)} <br> Driving Licence Number: ${d(f.driver_license_no)}</td>
         </tr>
       </table>
 
       <div style="page-break-before: always;"></div>
 
-      <!-- Page 2 -->
-      <div class="pdf-header">
-        <h1>UNITED INDIA INSURANCE COMPANY LIMITED</h1>
+      <!-- PAGE 2 -->
+      <div class="pdf-header" style="border-bottom-color: ${insurerObj.color};">
+        <h1 style="color: ${insurerObj.color};">${esc(c.insurer).toUpperCase()}</h1>
         <p>MOTOR CLAIM FORM - COMMERCIAL VEHICLE</p>
       </div>
       
       <table class="form-table">
-        <tr><td class="lbl" rowspan="3">ADDITIONAL LOSS DETAILS</td><td class="lbl">Commercial Vehicle (Additional Info)</td><td>Registered laden weight: _______ kg</td></tr>
+        <tr><td class="lbl" rowspan="2">ADDITIONAL LOSS DETAILS</td><td class="lbl">Commercial Vehicle Info</td><td>Registered laden weight: _______ kg</td></tr>
         <tr><td class="lbl">Type of Goods carried</td><td></td></tr>
-        <tr><td class="lbl">Passenger Vehicle (Additional Info)</td><td>Registered carrying capacity: _______</td></tr>
-        <tr><td class="lbl" rowspan="2">Permit / Fitness Certificate Details</td><td class="lbl">Permit valid for area(s)</td><td>${d(f.permit_no)}</td></tr>
+        <tr><td class="lbl" rowspan="2">Permit / Fitness Certificate</td><td class="lbl">Permit valid for area(s)</td><td>${d(f.permit_no)}</td></tr>
         <tr><td class="lbl">Fitness valid up to</td><td>${d(f.fitness_valid_upto)}</td></tr>
       </table>
 
@@ -435,20 +499,50 @@ async function generateClaimPDF() {
         <tr><td class="lbl">FIR / Crime diary number</td><td>${d(f.fir_no)}</td></tr>
       </table>
 
+      <div style="border: 1px solid #000; padding: 10px; margin-top: 15px; font-size: 9px;">
+        <b>DECLARATION BY INSURED</b><br><br>
+        I/We the above named, do hereby, to the best of my / our knowledge and belief, warrant, the truth of the foregoing statement in every respect.<br><br><br>
+        Date: ____________ &nbsp;&nbsp;&nbsp;&nbsp; Place: ____________ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>Signature of Insured / Claimant</b>
+      </div>
+    `;
+  } else {
+    // === PRIVATE CAR STANDARD FORM ===
+    formHTML = `
+      <div class="pdf-header" style="border-bottom-color: ${insurerObj.color};">
+        <h1 style="color: ${insurerObj.color};">${esc(c.insurer).toUpperCase()}</h1>
+        <p>MOTOR CLAIM FORM - PRIVATE CAR</p>
+      </div>
+      <div class="form-title" style="background-color: ${insurerObj.bg}; color: ${insurerObj.color}; border-color: ${insurerObj.color};">MOTOR INSURANCE CLAIM FORM</div>
+      
       <table class="form-table">
-        <tr><td class="lbl" rowspan="4">INSURED BANK DETAILS</td><td class="lbl">Account number</td><td></td></tr>
-        <tr><td class="lbl">Bank Name</td><td></td></tr>
-        <tr><td class="lbl">Branch Name</td><td></td></tr>
-        <tr><td class="lbl">IFSC Code Number</td><td></td></tr>
+        <tr><td class="lbl">Policy Number</td><td>${d(f.policy_no)}</td><td class="lbl">Date of Loss</td><td>${d(f.accident_date)}</td></tr>
+        <tr><td class="lbl">Insured Name</td><td>${d(f.insured_name)}</td><td class="lbl">Mobile</td><td>${d(f.mobile)}</td></tr>
+        <tr><td class="lbl">Vehicle Number</td><td>${d(f.vehicle_no)}</td><td class="lbl">Engine Number</td><td>${d(f.engine_no)}</td></tr>
+        <tr><td class="lbl">Chassis Number</td><td>${d(f.chassis_no)}</td><td class="lbl">Place of Accident</td><td>${d(f.place_of_loss)}</td></tr>
+        <tr><td class="lbl">Type of Loss</td><td>${d(f.type_of_loss)}</td><td class="lbl">Est. Repair Cost</td><td>${d(f.estimated_repair_cost)}</td></tr>
+      </table>
+
+      <table class="form-table">
+        <tr><td class="lbl">Brief Description of Accident</td><td colspan="3" style="height: 40px;">${d(f.description)}</td></tr>
+      </table>
+
+      <table class="form-table">
+        <tr><td class="lbl">Driver Name</td><td>${d(f.driver_name)}</td><td class="lbl">Driver License No</td><td>${d(f.driver_license_no)}</td></tr>
+        <tr><td class="lbl">Police Report Lodged</td><td>${d(f.police_report_lodged)}</td><td class="lbl">FIR / GD No</td><td>${d(f.fir_no)}</td></tr>
       </table>
 
       <div style="border: 1px solid #000; padding: 10px; margin-top: 15px; font-size: 9px;">
         <b>DECLARATION BY INSURED</b><br><br>
-        I/We the above named, do hereby, to the best of my / our knowledge and belief, warrant, the truth of the foregoing statement in every respect, and I / We agree that I / We have made, or in any further declaration the company may require in respect of the said accident, shall make any false or fraudulent statement, or any suppression or concealment the policy shall be void and all rights to recover thereunder in respect of past or future accidents shall be forfeited.<br><br><br>
-        Date: ____________ &nbsp;&nbsp;&nbsp;&nbsp; Place: ____________ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>Signature of Insured / Claimant</b>
+        I/We hereby declare that the information given above is true and correct to the best of my/our knowledge and belief. I/We further declare that the loss/damage was not caused by any willful act or negligence on my/our part.<br><br><br>
+        Date: ____________ &nbsp;&nbsp;&nbsp;&nbsp; Place: ____________ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>Signature of Insured</b>
       </div>
-      
-      <p style="font-size:8px;color:#999;text-align:center;margin-top:10px;">Generated by ClaimMitra — Verify all details before submission</p>
+    `;
+  }
+
+  const html = `
+    <div class="pdf-page">
+      ${formHTML}
+      <p style="font-size:8px;color:#999;text-align:center;margin-top:15px;">Generated by ClaimMitra — Verify all details before submission</p>
     </div>`;
     
   await renderPDFToDownload(html, `ClaimForm_${f.vehicle_no || 'claim'}.pdf`);
@@ -458,7 +552,7 @@ async function generatePhotoPDF() {
   const c = state.current;
   const photosHtml = c.photos.map(p => `<div class="photo-card"><img src="${p.dataUrl}" alt="${esc(p.shotType)}"/><div class="meta"><strong>${esc(SHOT_LABELS[p.shotType]?.label || p.shotType)}</strong><br/>Captured: ${esc(new Date(p.capturedAt).toLocaleString('en-IN'))}<br/>GPS: ${p.gps ? `${p.gps.lat.toFixed(6)}, ${p.gps.lng.toFixed(6)}` : 'Not available'}</div></div>`).join('');
   const html = `<div class="pdf-page"><div style="text-align:center;padding:20mm 0;border-bottom:2px solid #1E3A8A;"><h1 style="color:#1E3A8A;font-size:24px;">VEHICLE INSPECTION REPORT</h1><p style="margin-top:5mm;font-size:11px;">Generated by ClaimMitra</p></div>
-      <h2>Claim Summary</h2><table class="form-table"><tr><td class="lbl">Vehicle Number</td><td>${esc(c.fields.vehicle_no || '-')}</td></tr><tr><td class="lbl">Policy Number</td><td>${esc(c.fields.policy_no || '-')}</td></tr><tr><td class="lbl">Vehicle Type</td><td>${esc(VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.label || '-')}</td></tr><tr><td class="lbl">Insured Name</td><td>${esc(c.fields.insured_name || '-')}</td></tr><tr><td class="lbl">Inspection Date</td><td>${new Date().toLocaleDateString('en-IN')}</td></tr><tr><td class="lbl">Photos Attached</td><td>${c.photos.length}</td></tr></table>
+      <h2>Claim Summary</h2><table class="form-table"><tr><td class="lbl">Insurer</td><td>${esc(c.insurer)}</td></tr><tr><td class="lbl">Vehicle Number</td><td>${esc(c.fields.vehicle_no || '-')}</td></tr><tr><td class="lbl">Policy Number</td><td>${esc(c.fields.policy_no || '-')}</td></tr><tr><td class="lbl">Vehicle Type</td><td>${esc(VEHICLE_TYPES.find(v=>v.id===c.vehicleType)?.label || '-')}</td></tr><tr><td class="lbl">Insured Name</td><td>${esc(c.fields.insured_name || '-')}</td></tr><tr><td class="lbl">Inspection Date</td><td>${new Date().toLocaleDateString('en-IN')}</td></tr><tr><td class="lbl">Photos Attached</td><td>${c.photos.length}</td></tr></table>
       <div style="page-break-before:always;"></div><h2>Photographic Evidence</h2>${photosHtml || '<p style="font-size:11px;color:#666;">No photos captured.</p>'}</div>`;
   await renderPDFToDownload(html, `PhotoReport_${c.fields.vehicle_no || 'claim'}.pdf`);
 }
@@ -474,19 +568,18 @@ async function renderPDFToDownload(html, filename) {
 function renderInsurers() {
   return `<div class="max-w-md mx-auto min-h-screen bg-white pb-8"><header class="bg-[#1E3A8A] text-white p-4 flex items-center gap-3"><button onclick="setView('home')" class="text-2xl leading-none">‹</button><div><p class="font-semibold">Insurer Helplines</p><p class="text-xs opacity-80">Claim intimation ke liye call kariye</p></div></header>
     <main class="p-4 space-y-2"><p class="text-xs text-gray-500 mb-2">Numbers verify kar lijiye company website par — yeh general info hai.</p>
-      ${INSURERS.map(i => `<div class="card p-3"><p class="font-semibold text-sm">${esc(i.name)}</p><div class="flex gap-2 mt-2 text-xs"><a href="tel:${esc(i.tollfree.replace(/\s/g,''))}" class="bg-[#1E3A8A] text-white px-3 py-2 rounded-lg">📞 ${esc(i.tollfree)}</a><a href="mailto:${esc(i.email)}" class="bg-gray-100 text-gray-800 px-3 py-2 rounded-lg">✉ Email</a></div></div>`).join('')}
-      <p class="text-xs text-gray-500 mt-4 leading-relaxed"><strong>Tip:</strong> Toll-free par call karke "motor claim intimation" bolein, claim reference number note kariye, aur email par bhi likhit intimation bhej dein.</p></main></div>`;
+      ${INSURERS.map(i => `<div class="card p-3"><p class="font-semibold text-sm">${esc(i.name)}</p><div class="flex gap-2 mt-2 text-xs"><a href="tel:18001800" class="bg-[#1E3A8A] text-white px-3 py-2 rounded-lg">📞 Call Support</a></div></div>`).join('')}
+    </main></div>`;
 }
 
 function renderSettings() {
   return `<div class="max-w-md mx-auto min-h-screen bg-white pb-8"><header class="bg-[#1E3A8A] text-white p-4 flex items-center gap-3"><button onclick="setView('home')" class="text-2xl leading-none">‹</button><p class="font-semibold">Settings</p></header>
     <main class="p-4 space-y-3"><div class="card p-4"><p class="font-semibold text-sm">About</p><p class="text-xs text-gray-600 mt-1">ClaimMitra — frontend-only motor claim assistant. Sab data aapke device par (IndexedDB) locally save hota hai. Koi server nahi.</p></div>
-      <div class="card p-4"><p class="font-semibold text-sm">Privacy</p><p class="text-xs text-gray-600 mt-1">Documents, photos aur PDFs — sab kuch browser mein hi process hote hain. Kuch bhi upload nahi hota.</p></div>
       <button onclick="if(confirm('Saare local claims delete karein? Yeh undo nahi hoga.')){idbKeyval.del('claims').then(()=>{state.claims=[];toast('✓ Cleared');render();});}" class="w-full bg-red-50 text-red-700 p-4 rounded-xl font-semibold text-sm">🗑 Clear All Local Data</button></main></div>`;
 }
 
 function loadDemo() {
-  const demo = { id: uid(), vehicleType: 'truck', fields: { policy_no: 'MOT/2024/1234567', vehicle_no: 'MH12AB1234', engine_no: 'ENG12345678', chassis_no: 'MA3ABC12345678901', insured_name: 'Rajesh Kumar Sharma', mobile: '9876543210', email: 'rajesh@example.com', accident_date: '2025-01-15', place_of_loss: 'Mumbai-Pune Highway, Near Khopoli Toll', type_of_loss: 'Accident', estimated_repair_cost: '35000', description: 'Rear bumper damaged in minor collision at toll plaza', driver_name: 'Rajesh Kumar Sharma', driver_license_no: 'MH1220180012345', police_report_lodged: 'No' }, photos: [], createdAt: new Date().toISOString() };
+  const demo = { id: uid(), insurer: 'United India Insurance', vehicleType: 'truck', fields: { policy_no: 'MOT/2024/1234567', vehicle_no: 'MH12AB1234', engine_no: 'ENG12345678', chassis_no: 'MA3ABC12345678901', insured_name: 'Rajesh Kumar Sharma', mobile: '9876543210', email: 'rajesh@example.com', accident_date: '2025-01-15', place_of_loss: 'Mumbai-Pune Highway, Near Khopoli Toll', type_of_loss: 'Accident', estimated_repair_cost: '35000', description: 'Rear bumper damaged in minor collision at toll plaza', driver_name: 'Rajesh Kumar Sharma', driver_license_no: 'MH1220180012345', police_report_lodged: 'No' }, photos: [], createdAt: new Date().toISOString() };
   state.current = demo; state.wizardStep = 4; setView('wizard'); toast('Demo loaded — try PDF buttons');
 }
 
